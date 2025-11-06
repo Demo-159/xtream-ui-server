@@ -1,0 +1,111 @@
+{
+  "movies": [
+    {
+      "stream_id": 1,
+      "num": 1,
+      "name": "Shrek (2001)",
+      "title": "Shrek (2001)",
+      "stream_type": "movie",
+      "stream_icon": "https://static.wikia.nocookie.net/doblaje/images/6/69/Shrekban.png/revision/latest?cb=20200731225429&path-prefix=es",
+      "rating": "7.9",
+      "rating_5based": 3.95,
+      "added": "1699564800",
+      "category_id": "1",
+      "container_extension": "mkv",
+      "custom_sid": "",
+      "direct_source": "https://cdnvideo.davidmonrroy7.workers.dev/video/https%3A%2F%2Farchive.org%2Fdownload%2Fdercro-2040%2FDERCRO2040.mkv",
+      "plot": "Un malvado señor exilia a las criaturas de los cuentos de hadas al pantano de un ogro gruñón, que debe emprender una búsqueda y rescatar a una princesa.",
+      "director": "Andrew Adamson, Vicky Jenson",
+      "cast": "Mike Myers, Eddie Murphy, Cameron Diaz",
+      "genre": "Animación, Comedia",
+      "releaseDate": "2001",
+      "tmdb_id": "tt0126029"
+    }
+  ],
+  "series": [
+    {
+      "series_id": 1,
+      "num": 1,
+      "name": "Pluribus",
+      "title": "Pluribus",
+      "cover": "https://i.imgur.com/tVdzIkh.jpeg",
+      "plot": "La serie está ambientada en Albuquerque, siguiendo a la autora Carol Sturka, quien parece ser la única persona inmune a un virus inexplicable que transforma a la población mundial en ciudadanos contentos y optimistas.",
+      "cast": "Rhea Seehorn",
+      "director": "Vince Gilligan",
+      "genre": "Drama, Ciencia ficción",
+      "releaseDate": "2025-11-07",
+      "last_modified": "1699564800",
+      "rating": "8.5",
+      "rating_5based": 4.25,
+      "backdrop_path": ["https://d32qys9a6wm9no.cloudfront.net/images/tvs/backdrop/f2/0eb528b823acf5fcb65664b432ea07db_1280x720.jpg?t=1760041925"],
+      "youtube_trailer": "",
+      "episode_run_time": "45",
+      "category_id": "1",
+      "category_ids": [1],
+      "seasons": [
+        {
+          "season_number": 1,
+          "name": "Temporada 1",
+          "episode_count": 2,
+          "cover": "https://i.imgur.com/tVdzIkh.jpeg",
+          "air_date": "2025-01-01"
+        }
+      ],
+      "episodes": {
+        "1": [
+          {
+            "id": "101",
+            "episode_num": 1,
+            "title": "Episodio 1",
+            "container_extension": "mp4",
+            "info": {
+              "name": "Episodio 1",
+              "season": 1,
+              "episode_num": 1,
+              "air_date": "2025-01-01",
+              "plot": "La persona más infeliz del planeta debe salvar al mundo de la felicidad.",
+              "duration_secs": "2700",
+              "duration": "45:00",
+              "rating": "8.3",
+              "cover_big": "https://is1-ssl.mzstatic.com/image/thumb/ntLNBvnQxDUKa70T9THm8Q/580x386KF.TVALC02.webp"
+            },
+            "direct_source": "https://archive.org/download/ejemplo/pluribus_s01e01.mp4"
+          },
+          {
+            "id": "102",
+            "episode_num": 2,
+            "title": "Episodio 2 - La Aventura Continúa",
+            "container_extension": "mp4",
+            "info": {
+              "name": "Episodio 2 - La Aventura Continúa",
+              "season": 1,
+              "episode_num": 2,
+              "air_date": "2025-01-08",
+              "plot": "La trama se complica",
+              "duration_secs": "2700",
+              "duration": "45:00",
+              "rating": "8.5"
+            },
+            "direct_source": "https://archive.org/download/ejemplo/pluribus_s01e02.mp4"
+          }
+        ]
+      }
+    }
+  ],
+  "categories": {
+    "movies": [
+      {
+        "category_id": "1",
+        "category_name": "Películas",
+        "parent_id": 0
+      }
+    ],
+    "series": [
+      {
+        "category_id": "1",
+        "category_name": "Series",
+        "parent_id": 0
+      }
+    ]
+  }
+}
