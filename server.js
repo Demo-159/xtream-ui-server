@@ -12,7 +12,7 @@ const CONFIG = {
   github: {
     token: process.env.GITHUB_TOKEN || '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',
     owner: 'Demo-159',
-    repo: 'Xtream',
+    repo: 'xtream-ui-server',
     dataFile: 'data/content.json'
   },
   tmdb: {
