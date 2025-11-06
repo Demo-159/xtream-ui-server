@@ -1128,13 +1128,13 @@ app.post('/api/save-content', express.json(), async (req, res) => {
           air_date: data.first_air_date || "",
           episode_count: season.episodes.length,
           id: parseInt(seasonNum),
-          name: season.name || \`Temporada \${seasonNum}\`,
+          name: season.name || "Temporada " + seasonNum,
           overview: "",
           season_number: parseInt(seasonNum)
         });
         
         episodes[seasonNum] = season.episodes.map((ep, idx) => {
-          const episodeId = \`\${seriesId}_\${seasonNum}_\${ep.episode_num}\`;
+          const episodeId = seriesId + "_" + seasonNum + "_" + ep.episode_num;
           return {
             id: episodeId,
             episode_num: ep.episode_num,
