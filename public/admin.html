@@ -1,0 +1,513 @@
+import React, { useState } from 'react';
+import { Film, Tv, Plus, Search, Save, Trash2, Eye, Upload } from 'lucide-react';
+
+const XtreamAdminPanel = () => {
+  const [activeTab, setActiveTab] = useState('movies');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tmdbResults, setTmdbResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ text: '', type: '' });
+  
+  // Configuración de GitHub
+  const GITHUB_CONFIG = {
+    token: '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',
+    owner: 'Demo-159',
+    repo: 'xtream-ui-server',
+    dataFile: 'data/content.json'
+  };
+
+  const TMDB_API_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; // API Key pública de ejemplo
+
+  // Buscar en TMDB
+  const searchTMDB = async () => {
+    if (!searchQuery.trim()) return;
+    
+    setLoading(true);
+    setMessage({ text: '', type: '' });
+    
+    try {
+      const type = activeTab === 'movies' ? 'movie' : 'tv';
+      const url = `https://api.themoviedb.org/3/search/${type}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}&language=es-ES`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.results && data.results.length > 0) {
+        setTmdbResults(data.results.slice(0, 10));
+        setMessage({ text: `Se encontraron ${data.results.length} resultados`, type: 'success' });
+      } else {
+        setTmdbResults([]);
+        setMessage({ text: 'No se encontraron resultados', type: 'warning' });
+      }
+    } catch (error) {
+      setMessage({ text: `Error al buscar: ${error.message}`, type: 'error' });
+      setTmdbResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Obtener detalles completos de TMDB
+  const getTMDBDetails = async (id, type) => {
+    try {
+      const endpoint = type === 'movie' ? 'movie' : 'tv';
+      const url = `https://api.themoviedb.org/3/${endpoint}/${id}?api_key=${TMDB_API_KEY}&language=es-ES&append_to_response=credits,videos`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      return data;
+    } catch (error) {
+      console.error('Error obteniendo detalles:', error);
+      return null;
+    }
+  };
+
+  // Obtener episodios de una temporada
+  const getSeasonEpisodes = async (seriesId, seasonNumber) => {
+    try {
+      const url = `https://api.themoviedb.org/3/tv/${seriesId}/season/${seasonNumber}?api_key=${TMDB_API_KEY}&language=es-ES`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      return data.episodes || [];
+    } catch (error) {
+      console.error('Error obteniendo episodios:', error);
+      return [];
+    }
+  };
+
+  // Leer archivo de GitHub
+  const readGitHubFile = async () => {
+    try {
+      const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.dataFile}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `token ${GITHUB_CONFIG.token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const content = JSON.parse(atob(data.content));
+        return { content, sha: data.sha };
+      } else {
+        // Si el archivo no existe, devolver estructura vacía
+        return {
+          content: { movies: [], series: [], seriesEpisodes: {} },
+          sha: null
+        };
+      }
+    } catch (error) {
+      console.error('Error leyendo archivo:', error);
+      return {
+        content: { movies: [], series: [], seriesEpisodes: {} },
+        sha: null
+      };
+    }
+  };
+
+  // Guardar en GitHub
+  const saveToGitHub = async (content, sha) => {
+    try {
+      const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.dataFile}`;
+      
+      const payload = {
+        message: `Actualización de contenido - ${new Date().toISOString()}`,
+        content: btoa(unescape(encodeURIComponent(JSON.stringify(content, null, 2)))),
+        sha: sha
+      };
+      
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${GITHUB_CONFIG.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      return response.ok;
+    } catch (error) {
+      console.error('Error guardando en GitHub:', error);
+      return false;
+    }
+  };
+
+  // Agregar película
+  const addMovie = async (tmdbData, videoUrl) => {
+    if (!videoUrl) {
+      setMessage({ text: 'Debes proporcionar una URL de video', type: 'error' });
+      return;
+    }
+
+    setLoading(true);
+    setMessage({ text: 'Agregando película...', type: 'info' });
+
+    try {
+      const details = await getTMDBDetails(tmdbData.id, 'movie');
+      
+      const { content, sha } = await readGitHubFile();
+      
+      const newMovie = {
+        stream_id: content.movies.length + 1,
+        num: content.movies.length + 1,
+        name: details.title,
+        title: details.title,
+        stream_type: "movie",
+        stream_icon: `https://image.tmdb.org/t/p/w500${details.poster_path}`,
+        rating: details.vote_average?.toString() || "0",
+        rating_5based: (details.vote_average / 2) || 0,
+        added: Math.floor(Date.now() / 1000).toString(),
+        category_id: "1",
+        container_extension: videoUrl.split('.').pop() || "mp4",
+        custom_sid: "",
+        direct_source: videoUrl,
+        tmdb_id: details.id,
+        overview: details.overview,
+        release_date: details.release_date,
+        runtime: details.runtime,
+        genres: details.genres?.map(g => g.name).join(', ') || ''
+      };
+      
+      content.movies.push(newMovie);
+      
+      const success = await saveToGitHub(content, sha);
+      
+      if (success) {
+        setMessage({ text: '✓ Película agregada exitosamente', type: 'success' });
+        setTmdbResults([]);
+        setSearchQuery('');
+      } else {
+        setMessage({ text: 'Error al guardar en GitHub', type: 'error' });
+      }
+    } catch (error) {
+      setMessage({ text: `Error: ${error.message}`, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Agregar serie completa
+  const addSeries = async (tmdbData, baseVideoUrl) => {
+    if (!baseVideoUrl) {
+      setMessage({ text: 'Debes proporcionar una URL base para los videos', type: 'error' });
+      return;
+    }
+
+    setLoading(true);
+    setMessage({ text: 'Agregando serie y episodios...', type: 'info' });
+
+    try {
+      const details = await getTMDBDetails(tmdbData.id, 'tv');
+      
+      const { content, sha } = await readGitHubFile();
+      
+      const seriesId = Object.keys(content.seriesEpisodes).length + 1;
+      
+      const newSeries = {
+        series_id: seriesId,
+        name: details.name,
+        title: details.name,
+        cover: `https://image.tmdb.org/t/p/w500${details.poster_path}`,
+        plot: details.overview || '',
+        cast: details.credits?.cast?.slice(0, 5).map(c => c.name).join(', ') || '',
+        director: details.credits?.crew?.find(c => c.job === 'Director')?.name || '',
+        genre: details.genres?.map(g => g.name).join(', ') || '',
+        releaseDate: details.first_air_date || '',
+        last_modified: Math.floor(Date.now() / 1000).toString(),
+        rating: details.vote_average?.toString() || "0",
+        rating_5based: (details.vote_average / 2) || 0,
+        backdrop_path: [`https://image.tmdb.org/t/p/original${details.backdrop_path}`],
+        youtube_trailer: details.videos?.results?.[0]?.key ? `https://www.youtube.com/watch?v=${details.videos.results[0].key}` : '',
+        episode_run_time: details.episode_run_time?.[0]?.toString() || "45",
+        category_id: "1",
+        category_ids: [1],
+        num: content.series.length + 1,
+        tmdb_id: details.id
+      };
+      
+      content.series.push(newSeries);
+      
+      // Agregar temporadas y episodios
+      const seasonsData = [];
+      const episodesData = {};
+      
+      for (let i = 0; i < Math.min(details.number_of_seasons, 3); i++) {
+        const seasonNum = i + 1;
+        const episodes = await getSeasonEpisodes(tmdbData.id, seasonNum);
+        
+        seasonsData.push({
+          season_number: seasonNum,
+          name: `Temporada ${seasonNum}`,
+          episode_count: episodes.length,
+          cover: `https://image.tmdb.org/t/p/w500${details.poster_path}`,
+          cover_big: `https://image.tmdb.org/t/p/original${details.poster_path}`,
+          air_date: episodes[0]?.air_date || ''
+        });
+        
+        episodesData[seasonNum] = episodes.map((ep, idx) => ({
+          id: `${seriesId}${seasonNum}${ep.episode_number}`,
+          episode_num: ep.episode_number,
+          title: ep.name,
+          container_extension: "mp4",
+          info: {
+            name: ep.name,
+            season: seasonNum,
+            episode_num: ep.episode_number,
+            air_date: ep.air_date,
+            plot: ep.overview || '',
+            duration_secs: (details.episode_run_time?.[0] * 60 || 2700).toString(),
+            duration: `${details.episode_run_time?.[0] || 45}:00`,
+            rating: ep.vote_average?.toString() || "0",
+            cover_big: ep.still_path ? `https://image.tmdb.org/t/p/original${ep.still_path}` : ''
+          },
+          direct_source: `${baseVideoUrl}/s${String(seasonNum).padStart(2, '0')}e${String(ep.episode_number).padStart(2, '0')}.mp4`
+        }));
+      }
+      
+      content.seriesEpisodes[seriesId] = {
+        seasons: seasonsData,
+        episodes: episodesData
+      };
+      
+      const success = await saveToGitHub(content, sha);
+      
+      if (success) {
+        setMessage({ text: '✓ Serie agregada exitosamente', type: 'success' });
+        setTmdbResults([]);
+        setSearchQuery('');
+      } else {
+        setMessage({ text: 'Error al guardar en GitHub', type: 'error' });
+      }
+    } catch (error) {
+      setMessage({ text: `Error: ${error.message}`, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Componente de resultado
+  const ResultCard = ({ item }) => {
+    const [videoUrl, setVideoUrl] = useState('');
+    const [showUrlInput, setShowUrlInput] = useState(false);
+    
+    const isMovie = activeTab === 'movies';
+    const title = isMovie ? item.title : item.name;
+    const date = isMovie ? item.release_date : item.first_air_date;
+    const poster = item.poster_path 
+      ? `https://image.tmdb.org/t/p/w200${item.poster_path}` 
+      : 'https://via.placeholder.com/200x300?text=No+Image';
+
+    return (
+      <div className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow">
+        <div className="flex gap-4">
+          <img 
+            src={poster} 
+            alt={title}
+            className="w-24 h-36 object-cover rounded"
+          />
+          <div className="flex-1">
+            <h3 className="font-bold text-lg mb-1">{title}</h3>
+            <p className="text-sm text-gray-600 mb-2">
+              {date ? new Date(date).getFullYear() : 'N/A'}
+            </p>
+            <p className="text-sm text-gray-700 mb-2 line-clamp-3">
+              {item.overview || 'Sin descripción'}
+            </p>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-yellow-500">★</span>
+              <span className="text-sm font-semibold">
+                {item.vote_average?.toFixed(1) || 'N/A'}
+              </span>
+            </div>
+            
+            {showUrlInput ? (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder={isMovie ? "URL del video (ej: https://...video.mp4)" : "URL base (ej: https://...series/)"}
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => isMovie ? addMovie(item, videoUrl) : addSeries(item, videoUrl)}
+                    disabled={loading || !videoUrl}
+                    className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    <Save size={16} />
+                    Guardar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUrlInput(false);
+                      setVideoUrl('');
+                    }}
+                    className="px-3 py-2 border rounded text-sm hover:bg-gray-100"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowUrlInput(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Plus size={16} />
+                Agregar {isMovie ? 'Película' : 'Serie'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            Panel Administrativo Xtream UI
+          </h1>
+          <p className="text-gray-600">
+            Gestiona películas y series con TMDB y sincronización automática con GitHub
+          </p>
+        </div>
+
+        {/* Tabs */}
+        <div className="bg-white rounded-lg shadow-lg mb-6">
+          <div className="flex border-b">
+            <button
+              onClick={() => setActiveTab('movies')}
+              className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-semibold transition-colors ${
+                activeTab === 'movies'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <Film size={20} />
+              Películas
+            </button>
+            <button
+              onClick={() => setActiveTab('series')}
+              className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 font-semibold transition-colors ${
+                activeTab === 'series'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <Tv size={20} />
+              Series
+            </button>
+          </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder={`Buscar ${activeTab === 'movies' ? 'película' : 'serie'} por nombre o ID de TMDB...`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && searchTMDB()}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <button
+              onClick={searchTMDB}
+              disabled={loading || !searchQuery.trim()}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-semibold"
+            >
+              <Search size={20} />
+              Buscar
+            </button>
+          </div>
+        </div>
+
+        {/* Messages */}
+        {message.text && (
+          <div className={`rounded-lg p-4 mb-6 ${
+            message.type === 'success' ? 'bg-green-100 text-green-800' :
+            message.type === 'error' ? 'bg-red-100 text-red-800' :
+            message.type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+            'bg-blue-100 text-blue-800'
+          }`}>
+            {message.text}
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Procesando...</p>
+          </div>
+        )}
+
+        {/* Results */}
+        {!loading && tmdbResults.length > 0 && (
+          <div className="space-y-4">
+            {tmdbResults.map((item) => (
+              <ResultCard key={item.id} item={item} />
+            ))}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!loading && tmdbResults.length === 0 && searchQuery && (
+          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+            <div className="text-gray-400 mb-4">
+              {activeTab === 'movies' ? <Film size={64} className="mx-auto" /> : <Tv size={64} className="mx-auto" />}
+            </div>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">
+              No se encontraron resultados
+            </h3>
+            <p className="text-gray-600">
+              Intenta con otro término de búsqueda
+            </p>
+          </div>
+        )}
+
+        {/* Instructions */}
+        {!loading && tmdbResults.length === 0 && !searchQuery && (
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              ¿Cómo usar el panel?
+            </h3>
+            <ol className="space-y-3 text-gray-700">
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
+                <span>Busca una película o serie por su nombre en la barra de búsqueda</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
+                <span>Selecciona el contenido de los resultados de TMDB</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</span>
+                <span>Proporciona la URL del video (para películas) o URL base (para series)</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">4</span>
+                <span>El panel autocompletará todos los metadatos y los guardará en GitHub</span>
+              </li>
+            </ol>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default XtreamAdminPanel;
