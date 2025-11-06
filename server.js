@@ -255,26 +255,26 @@ app.get('/admin', (req, res) => {
         const { useState, useEffect } = React;
         
         const AdminPanel = () => {
-          const [tab, setTab] = useState('movies');
-          const [view, setView] = useState('search'); // 'search' o 'library'
+          const [tab, setTab] = useState('search');
+          const [contentType, setContentType] = useState('movies');
           const [query, setQuery] = useState('');
           const [results, setResults] = useState([]);
           const [loading, setLoading] = useState(false);
           const [message, setMessage] = useState('');
-          const [editingItem, setEditingItem] = useState(null);
-          const [library, setLibrary] = useState({ movies: [], series: [] });
+          const [editingContent, setEditingContent] = useState(null);
+          const [existingContent, setExistingContent] = useState({ movies: [], series: [] });
           
           useEffect(() => {
-            loadLibrary();
+            loadExistingContent();
           }, []);
           
-          const loadLibrary = async () => {
+          const loadExistingContent = async () => {
             try {
-              const res = await fetch('/api/library');
+              const res = await fetch('/api/get-content');
               const data = await res.json();
-              setLibrary(data);
+              setExistingContent(data);
             } catch (error) {
-              console.error('Error loading library:', error);
+              console.error('Error loading content:', error);
             }
           };
           
@@ -284,7 +284,7 @@ app.get('/admin', (req, res) => {
             setMessage('');
             
             try {
-              const type = tab === 'movies' ? 'movie' : 'tv';
+              const type = contentType === 'movies' ? 'movie' : 'tv';
               const res = await fetch(\`https://api.themoviedb.org/3/search/\${type}?api_key=${CONFIG.tmdb.apiKey}&query=\${encodeURIComponent(query)}&language=es-ES\`);
               const data = await res.json();
               setResults(data.results?.slice(0, 10) || []);
@@ -296,99 +296,27 @@ app.get('/admin', (req, res) => {
             }
           };
           
-          const fetchFullDetails = async (item) => {
+          const loadTMDBDetails = async (item) => {
             setLoading(true);
             try {
-              const type = tab === 'movies' ? 'movie' : 'tv';
-              const res = await fetch(\`https://api.themoviedb.org/3/\${type}/\${item.id}?api_key=${CONFIG.tmdb.apiKey}&language=es-ES&append_to_response=credits,videos\`);
+              const endpoint = contentType === 'movies' ? 'movie' : 'tv';
+              const res = await fetch(\`https://api.themoviedb.org/3/\${endpoint}/\${item.id}?api_key=${CONFIG.tmdb.apiKey}&language=es-ES&append_to_response=credits,videos\`);
               const details = await res.json();
               
-              if (tab === 'movies') {
-                setEditingItem({
-                  type: 'movie',
-                  tmdbId: details.id,
-                  name: details.title,
-                  title: details.title,
-                  overview: details.overview || '',
-                  poster: \`https://image.tmdb.org/t/p/w500\${details.poster_path}\`,
-                  backdrop: details.backdrop_path ? \`https://image.tmdb.org/t/p/original\${details.backdrop_path}\` : '',
-                  rating: details.vote_average || 0,
-                  year: details.release_date?.split('-')[0] || '',
-                  duration: details.runtime || 0,
-                  genre: details.genres?.map(g => g.name).join(', ') || '',
-                  director: details.credits?.crew?.find(c => c.job === 'Director')?.name || '',
-                  cast: details.credits?.cast?.slice(0, 5).map(c => c.name).join(', ') || '',
-                  trailer: details.videos?.results?.find(v => v.type === 'Trailer')?.key || '',
-                  url: ''
-                });
-              } else {
-                // Para series, obtener temporadas
-                const seasons = [];
-                for (let season of details.seasons || []) {
-                  if (season.season_number === 0) continue; // Saltar especiales
-                  
-                  const seasonRes = await fetch(\`https://api.themoviedb.org/3/tv/\${item.id}/season/\${season.season_number}?api_key=${CONFIG.tmdb.apiKey}&language=es-ES\`);
-                  const seasonData = await seasonRes.json();
-                  
-                  seasons.push({
-                    season_number: season.season_number,
-                    name: season.name,
-                    episode_count: season.episode_count,
-                    episodes: seasonData.episodes?.map(ep => ({
-                      episode_num: ep.episode_number,
-                      title: ep.name,
-                      overview: ep.overview || '',
-                      air_date: ep.air_date || '',
-                      still_path: ep.still_path ? \`https://image.tmdb.org/t/p/w500\${ep.still_path}\` : '',
-                      url: ''
-                    })) || []
-                  });
-                }
-                
-                setEditingItem({
-                  type: 'series',
-                  tmdbId: details.id,
-                  name: details.name,
-                  title: details.name,
-                  overview: details.overview || '',
-                  poster: \`https://image.tmdb.org/t/p/w500\${details.poster_path}\`,
-                  backdrop: details.backdrop_path ? \`https://image.tmdb.org/t/p/original\${details.backdrop_path}\` : '',
-                  rating: details.vote_average || 0,
-                  year: details.first_air_date?.split('-')[0] || '',
-                  genre: details.genres?.map(g => g.name).join(', ') || '',
-                  cast: details.credits?.cast?.slice(0, 5).map(c => c.name).join(', ') || '',
-                  trailer: details.videos?.results?.find(v => v.type === 'Trailer')?.key || '',
-                  seasons: seasons
-                });
+              if (contentType === 'series') {
+                const seasonsData = await Promise.all(
+                  (details.seasons || []).map(async (season) => {
+                    if (season.season_number === 0) return null;
+                    const seasonRes = await fetch(
+                      \`https://api.themoviedb.org/3/tv/\${item.id}/season/\${season.season_number}?api_key=${CONFIG.tmdb.apiKey}&language=es-ES\`
+                    );
+                    return seasonRes.json();
+                  })
+                );
+                details.seasonsWithEpisodes = seasonsData.filter(s => s);
               }
-            } catch (error) {
-              alert('Error: ' + error.message);
-            } finally {
-              setLoading(false);
-            }
-          };
-          
-          const saveContent = async () => {
-            if (!editingItem) return;
-            
-            setLoading(true);
-            try {
-              const res = await fetch('/api/save-content', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(editingItem)
-              });
               
-              const data = await res.json();
-              if (data.success) {
-                alert('✓ Contenido guardado correctamente');
-                setEditingItem(null);
-                setResults([]);
-                setQuery('');
-                loadLibrary();
-              } else {
-                alert('Error: ' + data.error);
-              }
+              setEditingContent({ ...details, isNew: true, contentType });
             } catch (error) {
               alert('Error: ' + error.message);
             } finally {
@@ -399,10 +327,32 @@ app.get('/admin', (req, res) => {
           const editExisting = async (item) => {
             setLoading(true);
             try {
-              const res = await fetch(\`/api/content/\${item.type}/\${item.id}\`);
-              const data = await res.json();
-              setEditingItem({ ...data, existingId: item.id });
-              setView('search');
+              const endpoint = item.stream_type === 'movie' || item.stream_id ? 'movie' : 'tv';
+              const tmdbId = item.tmdb_id || item.series_id;
+              
+              const res = await fetch(\`https://api.themoviedb.org/3/\${endpoint}/\${tmdbId}?api_key=${CONFIG.tmdb.apiKey}&language=es-ES&append_to_response=credits,videos\`);
+              const details = await res.json();
+              
+              if (endpoint === 'tv') {
+                const seasonsData = await Promise.all(
+                  (details.seasons || []).map(async (season) => {
+                    if (season.season_number === 0) return null;
+                    const seasonRes = await fetch(
+                      \`https://api.themoviedb.org/3/tv/\${tmdbId}/season/\${season.season_number}?api_key=${CONFIG.tmdb.apiKey}&language=es-ES\`
+                    );
+                    return seasonRes.json();
+                  })
+                );
+                details.seasonsWithEpisodes = seasonsData.filter(s => s);
+              }
+              
+              setEditingContent({ 
+                ...details, 
+                ...item,
+                isNew: false, 
+                contentType: endpoint === 'movie' ? 'movies' : 'series'
+              });
+              setTab('search');
             } catch (error) {
               alert('Error: ' + error.message);
             } finally {
@@ -410,26 +360,37 @@ app.get('/admin', (req, res) => {
             }
           };
           
-          const deleteContent = async (item) => {
-            if (!confirm(\`¿Eliminar "\${item.name}"?\`)) return;
+          const deleteContent = async (item, type) => {
+            if (!confirm(\`¿Eliminar "\${item.name || item.title}"?\`)) return;
             
+            setLoading(true);
             try {
-              const res = await fetch(\`/api/content/\${item.type}/\${item.id}\`, {
-                method: 'DELETE'
+              const res = await fetch('/api/delete-content', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  type, 
+                  id: type === 'movies' ? item.stream_id : item.series_id 
+                })
               });
+              
               const data = await res.json();
               if (data.success) {
-                alert('✓ Eliminado correctamente');
-                loadLibrary();
+                alert('✓ Contenido eliminado');
+                loadExistingContent();
+              } else {
+                alert('Error: ' + data.error);
               }
             } catch (error) {
               alert('Error: ' + error.message);
+            } finally {
+              setLoading(false);
             }
           };
           
           return (
             <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-              <div className="max-w-6xl mx-auto">
+              <div className="max-w-7xl mx-auto">
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                   <h1 className="text-3xl font-bold text-gray-800 mb-2">Panel Administrativo</h1>
                   <p className="text-gray-600">Gestiona tu contenido con TMDB</p>
@@ -437,30 +398,33 @@ app.get('/admin', (req, res) => {
                 
                 <div className="bg-white rounded-lg shadow-lg mb-6">
                   <div className="flex border-b">
-                    <button onClick={() => setTab('movies')} className={\`flex-1 px-6 py-4 font-semibold \${tab === 'movies' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}\`}>
-                      🎬 Películas
-                    </button>
-                    <button onClick={() => setTab('series')} className={\`flex-1 px-6 py-4 font-semibold \${tab === 'series' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}\`}>
-                      📺 Series
-                    </button>
-                  </div>
-                  <div className="flex border-b">
-                    <button onClick={() => setView('search')} className={\`flex-1 px-4 py-3 text-sm font-medium \${view === 'search' ? 'bg-gray-100 text-blue-600' : 'text-gray-600'}\`}>
+                    <button onClick={() => setTab('search')} className={\`flex-1 px-6 py-4 font-semibold \${tab === 'search' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}\`}>
                       🔍 Buscar y Agregar
                     </button>
-                    <button onClick={() => setView('library')} className={\`flex-1 px-4 py-3 text-sm font-medium \${view === 'library' ? 'bg-gray-100 text-blue-600' : 'text-gray-600'}\`}>
-                      📚 Biblioteca ({tab === 'movies' ? library.movies.length : library.series.length})
+                    <button onClick={() => setTab('manage')} className={\`flex-1 px-6 py-4 font-semibold \${tab === 'manage' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}\`}>
+                      📚 Gestionar Contenido
                     </button>
                   </div>
                 </div>
                 
-                {view === 'search' && !editingItem && (
+                {tab === 'search' && !editingContent && (
                   <>
+                    <div className="bg-white rounded-lg shadow-lg mb-6">
+                      <div className="flex border-b">
+                        <button onClick={() => setContentType('movies')} className={\`flex-1 px-6 py-4 font-semibold \${contentType === 'movies' ? 'border-b-2 border-green-600 text-green-600' : 'text-gray-600'}\`}>
+                          🎬 Películas
+                        </button>
+                        <button onClick={() => setContentType('series')} className={\`flex-1 px-6 py-4 font-semibold \${contentType === 'series' ? 'border-b-2 border-green-600 text-green-600' : 'text-gray-600'}\`}>
+                          📺 Series
+                        </button>
+                      </div>
+                    </div>
+                    
                     <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                       <div className="flex gap-3">
                         <input
                           type="text"
-                          placeholder={\`Buscar \${tab === 'movies' ? 'película' : 'serie'}...\`}
+                          placeholder={\`Buscar \${contentType === 'movies' ? 'película' : 'serie'}...\`}
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
                           onKeyPress={(e) => e.key === 'Enter' && searchTMDB()}
@@ -477,37 +441,567 @@ app.get('/admin', (req, res) => {
                       <div className="text-center py-12">
                         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                       </div>
-                    ))}
-                  </div>
-                  
-                  {item.seasons[selectedSeason] && (
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                      {item.seasons[selectedSeason].episodes.map((ep, epIdx) => (
-                        <div key={epIdx} className="border rounded p-4">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium mb-1">Episodio {ep.episode_num}</label>
-                              <input type="text" value={ep.title} onChange={(e) => updateEpisode(selectedSeason, epIdx, 'title', e.target.value)} className="w-full px-2 py-1 border rounded text-sm" />
-                            </div>
-                            <div className="md:col-span-2">
-                              <label className="block text-xs font-medium mb-1">URL del Video</label>
-                              <input type="text" value={ep.url} onChange={(e) => updateEpisode(selectedSeason, epIdx, 'url', e.target.value)} placeholder="https://..." className="w-full px-2 py-1 border rounded text-sm" />
-                            </div>
-                          </div>
-                        </div>
+                    )}
+                    
+                    <div className="space-y-4">
+                      {results.map(item => (
+                        <SearchResultCard key={item.id} item={item} contentType={contentType} onSelect={loadTMDBDetails} />
                       ))}
                     </div>
-                  )}
+                  </>
+                )}
+                
+                {tab === 'search' && editingContent && (
+                  <ContentEditor 
+                    content={editingContent} 
+                    onCancel={() => { setEditingContent(null); loadExistingContent(); }}
+                    onSaved={() => { setEditingContent(null); loadExistingContent(); setResults([]); setQuery(''); }}
+                  />
+                )}
+                
+                {tab === 'manage' && (
+                  <ManageContent 
+                    content={existingContent} 
+                    onEdit={editExisting}
+                    onDelete={deleteContent}
+                    onRefresh={loadExistingContent}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        };
+        
+        const SearchResultCard = ({ item, contentType, onSelect }) => {
+          const title = contentType === 'movies' ? item.title : item.name;
+          const poster = item.poster_path ? \`https://image.tmdb.org/t/p/w200\${item.poster_path}\` : 'https://via.placeholder.com/200x300?text=No+Image';
+          const date = item.release_date || item.first_air_date;
+          
+          return (
+            <div className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition">
+              <div className="flex gap-4">
+                <img src={poster} alt={title} className="w-24 h-36 object-cover rounded" />
+                <div className="flex-1">
+                  <h3 className="font-bold text-lg mb-1">{title}</h3>
+                  <p className="text-sm text-gray-600 mb-2">
+                    ⭐ {item.vote_average?.toFixed(1) || 'N/A'} • 📅 {date ? new Date(date).getFullYear() : 'N/A'}
+                  </p>
+                  <p className="text-sm text-gray-700 mb-3 line-clamp-2">{item.overview || 'Sin descripción'}</p>
+                  
+                  <button 
+                    onClick={() => onSelect(item)} 
+                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+                  >
+                    ➕ Agregar / Editar
+                  </button>
                 </div>
+              </div>
+            </div>
+          );
+        };
+        
+        const ContentEditor = ({ content, onCancel, onSaved }) => {
+          const [formData, setFormData] = useState({});
+          const [saving, setSaving] = useState(false);
+          
+          useEffect(() => {
+            if (content.contentType === 'movies') {
+              setFormData({
+                title: content.title || '',
+                overview: content.overview || '',
+                rating: content.vote_average || 0,
+                poster: content.poster_path ? \`https://image.tmdb.org/t/p/w500\${content.poster_path}\` : '',
+                backdrop: content.backdrop_path ? \`https://image.tmdb.org/t/p/original\${content.backdrop_path}\` : '',
+                director: content.credits?.crew?.find(c => c.job === 'Director')?.name || '',
+                cast: content.credits?.cast?.slice(0, 5).map(a => a.name).join(', ') || '',
+                genres: content.genres?.map(g => g.name).join(', ') || '',
+                runtime: content.runtime || 0,
+                release_date: content.release_date || '',
+                url: content.direct_source || '',
+                tmdb_id: content.id
+              });
+            } else {
+              const seasons = {};
+              (content.seasonsWithEpisodes || []).forEach(season => {
+                if (!season) return;
+                seasons[season.season_number] = {
+                  name: season.name,
+                  episodes: (season.episodes || []).map(ep => ({
+                    episode_num: ep.episode_number,
+                    title: ep.name,
+                    overview: ep.overview || '',
+                    still_path: ep.still_path ? \`https://image.tmdb.org/t/p/w500\${ep.still_path}\` : '',
+                    url: ''
+                  }))
+                };
+              });
+              
+              setFormData({
+                name: content.name || '',
+                overview: content.overview || '',
+                rating: content.vote_average || 0,
+                poster: content.poster_path ? \`https://image.tmdb.org/t/p/w500\${content.poster_path}\` : '',
+                backdrop: content.backdrop_path ? \`https://image.tmdb.org/t/p/original\${content.backdrop_path}\` : '',
+                cast: content.credits?.cast?.slice(0, 5).map(a => a.name).join(', ') || '',
+                genres: content.genres?.map(g => g.name).join(', ') || '',
+                first_air_date: content.first_air_date || '',
+                last_air_date: content.last_air_date || '',
+                number_of_seasons: content.number_of_seasons || 0,
+                number_of_episodes: content.number_of_episodes || 0,
+                tmdb_id: content.id,
+                seasons
+              });
+            }
+          }, [content]);
+          
+          const updateField = (field, value) => {
+            setFormData(prev => ({ ...prev, [field]: value }));
+          };
+          
+          const updateEpisodeUrl = (season, episodeIdx, url) => {
+            setFormData(prev => ({
+              ...prev,
+              seasons: {
+                ...prev.seasons,
+                [season]: {
+                  ...prev.seasons[season],
+                  episodes: prev.seasons[season].episodes.map((ep, idx) => 
+                    idx === episodeIdx ? { ...ep, url } : ep
+                  )
+                }
+              }
+            }));
+          };
+          
+          const saveContent = async () => {
+            setSaving(true);
+            try {
+              const res = await fetch('/api/save-content', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  type: content.contentType,
+                  isNew: content.isNew,
+                  data: formData,
+                  originalId: content.stream_id || content.series_id
+                })
+              });
+              
+              const data = await res.json();
+              if (data.success) {
+                alert('✓ Contenido guardado correctamente');
+                onSaved();
+              } else {
+                alert('Error: ' + data.error);
+              }
+            } catch (error) {
+              alert('Error: ' + error.message);
+            } finally {
+              setSaving(false);
+            }
+          };
+          
+          return (
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="flex justify-between items-start mb-6">
+                <h2 className="text-2xl font-bold">
+                  {content.isNew ? '➕ Agregar' : '✏️ Editar'} {content.contentType === 'movies' ? 'Película' : 'Serie'}
+                </h2>
+                <button onClick={onCancel} className="text-gray-500 hover:text-gray-700">✕</button>
+              </div>
+              
+              {content.contentType === 'movies' ? (
+                <MovieForm formData={formData} updateField={updateField} />
+              ) : (
+                <SeriesForm formData={formData} updateField={updateField} updateEpisodeUrl={updateEpisodeUrl} />
               )}
               
-              <div className="flex gap-3">
-                <button onClick={onSave} className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold">
-                  💾 Guardar {item.type === 'movie' ? 'Película' : 'Serie'}
+              <div className="flex gap-3 mt-6">
+                <button 
+                  onClick={saveContent} 
+                  disabled={saving}
+                  className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {saving ? '💾 Guardando...' : '💾 Guardar'}
                 </button>
-                <button onClick={onCancel} className="px-6 py-3 border rounded-lg hover:bg-gray-100">
+                <button 
+                  onClick={onCancel}
+                  className="px-6 py-3 border rounded-lg hover:bg-gray-100"
+                >
                   Cancelar
                 </button>
+              </div>
+            </div>
+          );
+        };
+        
+        const MovieForm = ({ formData, updateField }) => (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">Título</label>
+                <input
+                  type="text"
+                  value={formData.title || ''}
+                  onChange={(e) => updateField('title', e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Director</label>
+                <input
+                  type="text"
+                  value={formData.director || ''}
+                  onChange={(e) => updateField('director', e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold mb-2">Sinopsis</label>
+              <textarea
+                value={formData.overview || ''}
+                onChange={(e) => updateField('overview', e.target.value)}
+                rows="3"
+                className="w-full px-3 py-2 border rounded"
+              />
+            </div>
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">Rating</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={formData.rating || 0}
+                  onChange={(e) => updateField('rating', parseFloat(e.target.value))}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Duración (min)</label>
+                <input
+                  type="number"
+                  value={formData.runtime || 0}
+                  onChange={(e) => updateField('runtime', parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Fecha Estreno</label>
+                <input
+                  type="date"
+                  value={formData.release_date || ''}
+                  onChange={(e) => updateField('release_date', e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">Reparto</label>
+                <input
+                  type="text"
+                  value={formData.cast || ''}
+                  onChange={(e) => updateField('cast', e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                  placeholder="Actor 1, Actor 2, Actor 3..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Géneros</label>
+                <input
+                  type="text"
+                  value={formData.genres || ''}
+                  onChange={(e) => updateField('genres', e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                  placeholder="Acción, Drama, Comedia..."
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">URL Poster</label>
+                <input
+                  type="text"
+                  value={formData.poster || ''}
+                  onChange={(e) => updateField('poster', e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">URL Backdrop</label>
+                <input
+                  type="text"
+                  value={formData.backdrop || ''}
+                  onChange={(e) => updateField('backdrop', e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold mb-2 text-red-600">⚠️ URL del Video (requerido)</label>
+              <input
+                type="text"
+                value={formData.url || ''}
+                onChange={(e) => updateField('url', e.target.value)}
+                className="w-full px-3 py-2 border rounded"
+                placeholder="https://..."
+              />
+            </div>
+          </div>
+        );
+        
+        const SeriesForm = ({ formData, updateField, updateEpisodeUrl }) => {
+          const [selectedSeason, setSelectedSeason] = useState(null);
+          
+          useEffect(() => {
+            if (formData.seasons && !selectedSeason) {
+              const firstSeason = Object.keys(formData.seasons)[0];
+              if (firstSeason) setSelectedSeason(parseInt(firstSeason));
+            }
+          }, [formData.seasons]);
+          
+          return (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Nombre de la Serie</label>
+                  <input
+                    type="text"
+                    value={formData.name || ''}
+                    onChange={(e) => updateField('name', e.target.value)}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Reparto</label>
+                  <input
+                    type="text"
+                    value={formData.cast || ''}
+                    onChange={(e) => updateField('cast', e.target.value)}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold mb-2">Sinopsis</label>
+                <textarea
+                  value={formData.overview || ''}
+                  onChange={(e) => updateField('overview', e.target.value)}
+                  rows="3"
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+              
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Rating</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.rating || 0}
+                    onChange={(e) => updateField('rating', parseFloat(e.target.value))}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Temporadas</label>
+                  <input
+                    type="number"
+                    value={formData.number_of_seasons || 0}
+                    readOnly
+                    className="w-full px-3 py-2 border rounded bg-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Primer Episodio</label>
+                  <input
+                    type="date"
+                    value={formData.first_air_date || ''}
+                    onChange={(e) => updateField('first_air_date', e.target.value)}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Último Episodio</label>
+                  <input
+                    type="date"
+                    value={formData.last_air_date || ''}
+                    onChange={(e) => updateField('last_air_date', e.target.value)}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Géneros</label>
+                  <input
+                    type="text"
+                    value={formData.genres || ''}
+                    onChange={(e) => updateField('genres', e.target.value)}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">URL Poster</label>
+                  <input
+                    type="text"
+                    value={formData.poster || ''}
+                    onChange={(e) => updateField('poster', e.target.value)}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+              </div>
+              
+              <div className="border-t pt-4 mt-6">
+                <h3 className="text-lg font-bold mb-4">📺 Temporadas y Episodios</h3>
+                
+                {formData.seasons && Object.keys(formData.seasons).length > 0 && (
+                  <>
+                    <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                      {Object.keys(formData.seasons).map(seasonNum => (
+                        <button
+                          key={seasonNum}
+                          onClick={() => setSelectedSeason(parseInt(seasonNum))}
+                          className={\`px-4 py-2 rounded whitespace-nowrap \${
+                            selectedSeason === parseInt(seasonNum)
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-200 hover:bg-gray-300'
+                          }\`}
+                        >
+                          Temporada {seasonNum} ({formData.seasons[seasonNum].episodes?.length || 0} eps)
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {selectedSeason && formData.seasons[selectedSeason] && (
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {formData.seasons[selectedSeason].episodes.map((episode, idx) => (
+                          <div key={idx} className="border rounded p-3 bg-gray-50">
+                            <div className="flex gap-3">
+                              {episode.still_path && (
+                                <img 
+                                  src={episode.still_path} 
+                                  alt={episode.title}
+                                  className="w-32 h-20 object-cover rounded"
+                                />
+                              )}
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-sm">
+                                  {selectedSeason}x{String(episode.episode_num).padStart(2, '0')} - {episode.title}
+                                </h4>
+                                <p className="text-xs text-gray-600 mb-2 line-clamp-2">{episode.overview}</p>
+                                <input
+                                  type="text"
+                                  placeholder="URL del episodio"
+                                  value={episode.url || ''}
+                                  onChange={(e) => updateEpisodeUrl(selectedSeason, idx, e.target.value)}
+                                  className="w-full px-2 py-1 border rounded text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        };
+        
+        const ManageContent = ({ content, onEdit, onDelete, onRefresh }) => {
+          const [filter, setFilter] = useState('all');
+          
+          return (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">🎬 Películas ({content.movies?.length || 0})</h2>
+                  <button onClick={onRefresh} className="text-blue-600 hover:text-blue-700">
+                    🔄 Recargar
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {content.movies?.length === 0 && (
+                    <p className="text-gray-500 text-center py-8">No hay películas agregadas</p>
+                  )}
+                  {content.movies?.map(movie => (
+                    <div key={movie.stream_id} className="border rounded p-3 flex items-start gap-3">
+                      <img 
+                        src={movie.stream_icon} 
+                        alt={movie.name}
+                        className="w-16 h-24 object-cover rounded"
+                        onError={(e) => e.target.src = 'https://via.placeholder.com/100x150?text=No+Image'}
+                      />
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{movie.name}</h3>
+                        <p className="text-sm text-gray-600">⭐ {movie.rating || 'N/A'}</p>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{movie.overview}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => onEdit(movie)}
+                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          onClick={() => onDelete(movie, 'movies')}
+                          className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-xl font-bold mb-4">📺 Series ({content.series?.length || 0})</h2>
+                <div className="space-y-3">
+                  {content.series?.length === 0 && (
+                    <p className="text-gray-500 text-center py-8">No hay series agregadas</p>
+                  )}
+                  {content.series?.map(series => (
+                    <div key={series.series_id} className="border rounded p-3 flex items-start gap-3">
+                      <img 
+                        src={series.cover} 
+                        alt={series.name}
+                        className="w-16 h-24 object-cover rounded"
+                        onError={(e) => e.target.src = 'https://via.placeholder.com/100x150?text=No+Image'}
+                      />
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{series.name}</h3>
+                        <p className="text-sm text-gray-600">⭐ {series.rating || 'N/A'}</p>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{series.plot}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => onEdit(series)}
+                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          onClick={() => onDelete(series, 'series')}
+                          className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           );
@@ -520,103 +1014,18 @@ app.get('/admin', (req, res) => {
   `);
 });
 
-// API para obtener biblioteca
-app.get('/api/library', (req, res) => {
-  const movies = (contentData.movies || []).map(m => ({
-    id: m.stream_id,
-    type: 'movie',
-    name: m.name,
-    poster: m.stream_icon,
-    rating: parseFloat(m.rating) || 0,
-    year: m.year || '',
-    overview: m.overview || ''
-  }));
-  
-  const series = (contentData.series || []).map(s => ({
-    id: s.series_id,
-    type: 'series',
-    name: s.name,
-    poster: s.cover,
-    rating: parseFloat(s.rating) || 0,
-    year: s.year || '',
-    overview: s.plot || ''
-  }));
-  
-  res.json({ movies, series });
-});
-
-// API para obtener contenido específico
-app.get('/api/content/:type/:id', (req, res) => {
-  const { type, id } = req.params;
-  
-  if (type === 'movie') {
-    const movie = (contentData.movies || []).find(m => m.stream_id == id);
-    if (!movie) return res.status(404).json({ error: 'Not found' });
-    
-    res.json({
-      type: 'movie',
-      tmdbId: movie.tmdb_id,
-      name: movie.name,
-      title: movie.title,
-      overview: movie.overview || '',
-      poster: movie.stream_icon,
-      backdrop: movie.backdrop_path || '',
-      rating: parseFloat(movie.rating) || 0,
-      year: movie.year || '',
-      duration: movie.duration || 0,
-      genre: movie.genre || '',
-      director: movie.director || '',
-      cast: movie.cast || '',
-      trailer: movie.trailer || '',
-      url: movie.direct_source || ''
-    });
-  } else {
-    const series = (contentData.series || []).find(s => s.series_id == id);
-    if (!series) return res.status(404).json({ error: 'Not found' });
-    
-    const episodes = contentData.seriesEpisodes?.[id];
-    const seasons = [];
-    
-    if (episodes?.episodes) {
-      for (const seasonNum in episodes.episodes) {
-        seasons.push({
-          season_number: parseInt(seasonNum),
-          name: \`Temporada \${seasonNum}\`,
-          episode_count: episodes.episodes[seasonNum].length,
-          episodes: episodes.episodes[seasonNum].map(ep => ({
-            episode_num: ep.episode_num,
-            title: ep.title,
-            overview: ep.info?.plot || '',
-            air_date: ep.info?.releasedate || '',
-            still_path: ep.info?.movie_image || '',
-            url: ep.direct_source || ''
-          }))
-        });
-      }
-    }
-    
-    res.json({
-      type: 'series',
-      tmdbId: series.tmdb_id,
-      name: series.name,
-      title: series.title || series.name,
-      overview: series.plot || '',
-      poster: series.cover,
-      backdrop: series.backdrop_path || '',
-      rating: parseFloat(series.rating) || 0,
-      year: series.year || '',
-      genre: series.genre || '',
-      cast: series.cast || '',
-      trailer: series.trailer || '',
-      seasons: seasons
-    });
-  }
+// API para obtener contenido existente
+app.get('/api/get-content', (req, res) => {
+  res.json({
+    movies: contentData.movies || [],
+    series: contentData.series || []
+  });
 });
 
 // API para guardar contenido (nuevo o editado)
 app.post('/api/save-content', express.json(), async (req, res) => {
   try {
-    const data = req.body;
+    const { type, isNew, data, originalId } = req.body;
     
     // Leer datos actuales de GitHub
     let currentData = { ...contentData };
@@ -624,10 +1033,10 @@ app.post('/api/save-content', express.json(), async (req, res) => {
     
     try {
       const githubRes = await axios.get(
-        \`https://api.github.com/repos/\${CONFIG.github.owner}/\${CONFIG.github.repo}/contents/\${CONFIG.github.dataFile}\`,
+        `https://api.github.com/repos/${CONFIG.github.owner}/${CONFIG.github.repo}/contents/${CONFIG.github.dataFile}`,
         {
           headers: {
-            'Authorization': \`token \${CONFIG.github.token}\`,
+            'Authorization': `token ${CONFIG.github.token}`,
             'Accept': 'application/vnd.github.v3+json'
           }
         }
@@ -638,122 +1047,135 @@ app.post('/api/save-content', express.json(), async (req, res) => {
       console.log('Creando nuevo archivo en GitHub');
     }
     
-    if (!currentData.movies) currentData.movies = [];
-    if (!currentData.series) currentData.series = [];
-    if (!currentData.seriesEpisodes) currentData.seriesEpisodes = {};
-    
-    if (data.type === 'movie') {
-      const movieId = data.existingId || (currentData.movies.length + 1);
+    if (type === 'movies') {
+      if (!currentData.movies) currentData.movies = [];
       
       const movieData = {
-        stream_id: movieId,
-        num: movieId,
-        name: data.name,
-        title: data.title || data.name,
+        stream_id: isNew ? (currentData.movies.length + 1) : originalId,
+        num: isNew ? (currentData.movies.length + 1) : originalId,
+        name: data.title,
+        title: data.title,
         stream_type: "movie",
         stream_icon: data.poster,
-        backdrop_path: data.backdrop || '',
-        rating: data.rating.toString(),
-        rating_5based: data.rating / 2,
+        rating: data.rating?.toString() || "0",
+        rating_5based: (data.rating / 2) || 0,
         added: Math.floor(Date.now() / 1000).toString(),
         category_id: "1",
-        container_extension: data.url ? data.url.split('.').pop() : "mp4",
+        container_extension: data.url?.split('.').pop() || "mp4",
         custom_sid: "",
         direct_source: data.url,
-        tmdb_id: data.tmdbId,
+        tmdb_id: data.tmdb_id,
         overview: data.overview,
-        year: data.year,
-        duration: data.duration,
-        genre: data.genre,
         director: data.director,
         cast: data.cast,
-        trailer: data.trailer
+        genres: data.genres,
+        runtime: data.runtime,
+        release_date: data.release_date,
+        backdrop_path: data.backdrop
       };
       
-      if (data.existingId) {
-        const idx = currentData.movies.findIndex(m => m.stream_id == data.existingId);
-        if (idx !== -1) currentData.movies[idx] = movieData;
-      } else {
+      if (isNew) {
         currentData.movies.push(movieData);
+      } else {
+        const idx = currentData.movies.findIndex(m => m.stream_id == originalId);
+        if (idx !== -1) {
+          currentData.movies[idx] = movieData;
+        }
       }
     } else {
-      const seriesId = data.existingId || (Object.keys(currentData.seriesEpisodes).length + 1);
+      // Series
+      if (!currentData.series) currentData.series = [];
+      if (!currentData.seriesEpisodes) currentData.seriesEpisodes = {};
+      
+      const seriesId = isNew ? (Object.keys(currentData.seriesEpisodes).length + 1) : originalId;
       
       const seriesData = {
         series_id: seriesId,
         name: data.name,
-        title: data.title || data.name,
+        title: data.name,
         cover: data.poster,
-        backdrop_path: data.backdrop || '',
-        plot: data.overview,
-        rating: data.rating.toString(),
-        rating_5based: data.rating / 2,
+        plot: data.overview || '',
+        cast: data.cast || '',
+        director: data.director || '',
+        genre: data.genres || '',
+        rating: data.rating?.toString() || "0",
+        rating_5based: (data.rating / 2) || 0,
         category_id: "1",
         category_ids: [1],
-        num: seriesId,
-        tmdb_id: data.tmdbId,
-        year: data.year,
-        genre: data.genre,
-        cast: data.cast,
-        trailer: data.trailer
+        num: isNew ? (currentData.series.length + 1) : originalId,
+        last_modified: Math.floor(Date.now() / 1000).toString(),
+        tmdb_id: data.tmdb_id,
+        backdrop_path: data.backdrop
       };
       
-      if (data.existingId) {
-        const idx = currentData.series.findIndex(s => s.series_id == data.existingId);
-        if (idx !== -1) currentData.series[idx] = seriesData;
-      } else {
+      if (isNew) {
         currentData.series.push(seriesData);
+      } else {
+        const idx = currentData.series.findIndex(s => s.series_id == originalId);
+        if (idx !== -1) {
+          currentData.series[idx] = seriesData;
+        }
       }
       
-      // Procesar temporadas y episodios
-      const episodesData = {
-        seasons: [],
-        episodes: {}
-      };
+      // Procesar episodios
+      const seasons = [];
+      const episodes = {};
       
-      let globalEpisodeId = 1;
-      
-      for (const season of data.seasons || []) {
-        episodesData.seasons.push({
-          season_number: season.season_number,
-          name: season.name,
+      for (const seasonNum in data.seasons) {
+        const season = data.seasons[seasonNum];
+        
+        seasons.push({
+          air_date: data.first_air_date || "",
           episode_count: season.episodes.length,
-          air_date: season.episodes[0]?.air_date || ''
+          id: parseInt(seasonNum),
+          name: season.name || \`Temporada \${seasonNum}\`,
+          overview: "",
+          season_number: parseInt(seasonNum)
         });
         
-        episodesData.episodes[season.season_number] = season.episodes.map(ep => ({
-          id: \`\${seriesId}_\${season.season_number}_\${ep.episode_num}\`,
-          episode_num: ep.episode_num,
-          title: ep.title,
-          container_extension: ep.url ? ep.url.split('.').pop() : "mp4",
-          direct_source: ep.url,
-          info: {
-            name: ep.title,
-            plot: ep.overview,
-            releasedate: ep.air_date,
-            movie_image: ep.still_path,
-            rating: data.rating.toString()
-          },
-          season: season.season_number
-        }));
+        episodes[seasonNum] = season.episodes.map((ep, idx) => {
+          const episodeId = \`\${seriesId}_\${seasonNum}_\${ep.episode_num}\`;
+          return {
+            id: episodeId,
+            episode_num: ep.episode_num,
+            title: ep.title,
+            container_extension: ep.url?.split('.').pop() || "mp4",
+            info: {
+              name: ep.title,
+              overview: ep.overview || '',
+              still_path: ep.still_path || '',
+              air_date: data.first_air_date || '',
+              rating: data.rating || 0
+            },
+            direct_source: ep.url,
+            added: Math.floor(Date.now() / 1000).toString()
+          };
+        });
       }
       
-      currentData.seriesEpisodes[seriesId] = episodesData;
+      currentData.seriesEpisodes[seriesId] = {
+        seasons,
+        episodes
+      };
     }
     
     // Guardar en GitHub
+    const commitMessage = isNew 
+      ? \`Add \${type === 'movies' ? 'movie' : 'series'}: \${data.title || data.name}\`
+      : \`Update \${type === 'movies' ? 'movie' : 'series'}: \${data.title || data.name}\`;
+    
     const payload = {
-      message: \`\${data.existingId ? 'Update' : 'Add'} \${data.type}: \${data.name}\`,
+      message: commitMessage,
       content: Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64'),
       ...(sha && { sha })
     };
     
     await axios.put(
-      \`https://api.github.com/repos/\${CONFIG.github.owner}/\${CONFIG.github.repo}/contents/\${CONFIG.github.dataFile}\`,
+      `https://api.github.com/repos/${CONFIG.github.owner}/${CONFIG.github.repo}/contents/${CONFIG.github.dataFile}`,
       payload,
       {
         headers: {
-          'Authorization': \`token \${CONFIG.github.token}\`,
+          'Authorization': `token ${CONFIG.github.token}`,
           'Accept': 'application/vnd.github.v3+json'
         }
       }
@@ -770,19 +1192,19 @@ app.post('/api/save-content', express.json(), async (req, res) => {
 });
 
 // API para eliminar contenido
-app.delete('/api/content/:type/:id', async (req, res) => {
+app.post('/api/delete-content', express.json(), async (req, res) => {
   try {
-    const { type, id } = req.params;
+    const { type, id } = req.body;
     
     // Leer datos actuales de GitHub
     let currentData = { ...contentData };
     let sha = null;
     
     const githubRes = await axios.get(
-      \`https://api.github.com/repos/\${CONFIG.github.owner}/\${CONFIG.github.repo}/contents/\${CONFIG.github.dataFile}\`,
+      `https://api.github.com/repos/${CONFIG.github.owner}/${CONFIG.github.repo}/contents/${CONFIG.github.dataFile}`,
       {
         headers: {
-          'Authorization': \`token \${CONFIG.github.token}\`,
+          'Authorization': `token ${CONFIG.github.token}`,
           'Accept': 'application/vnd.github.v3+json'
         }
       }
@@ -790,26 +1212,29 @@ app.delete('/api/content/:type/:id', async (req, res) => {
     currentData = JSON.parse(Buffer.from(githubRes.data.content, 'base64').toString());
     sha = githubRes.data.sha;
     
-    if (type === 'movie') {
+    // Eliminar contenido
+    if (type === 'movies') {
       currentData.movies = (currentData.movies || []).filter(m => m.stream_id != id);
     } else {
       currentData.series = (currentData.series || []).filter(s => s.series_id != id);
-      delete currentData.seriesEpisodes[id];
+      if (currentData.seriesEpisodes) {
+        delete currentData.seriesEpisodes[id];
+      }
     }
     
     // Guardar en GitHub
     const payload = {
-      message: \`Delete \${type}: \${id}\`,
+      message: \`Delete \${type}: ID \${id}\`,
       content: Buffer.from(JSON.stringify(currentData, null, 2)).toString('base64'),
       sha
     };
     
     await axios.put(
-      \`https://api.github.com/repos/\${CONFIG.github.owner}/\${CONFIG.github.repo}/contents/\${CONFIG.github.dataFile}\`,
+      `https://api.github.com/repos/${CONFIG.github.owner}/${CONFIG.github.repo}/contents/${CONFIG.github.dataFile}`,
       payload,
       {
         headers: {
-          'Authorization': \`token \${CONFIG.github.token}\`,
+          'Authorization': `token ${CONFIG.github.token}`,
           'Accept': 'application/vnd.github.v3+json'
         }
       }
@@ -883,7 +1308,7 @@ app.get('/get.php', (req, res) => {
     return res.status(401).send('#EXTM3U\n#EXTINF:-1,Error\nhttp://invalid');
   }
   
-  const baseUrl = \`\${req.protocol}://\${req.get('host')}\`;
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   let m3u = '#EXTM3U\n\n';
   
   // Series
@@ -891,17 +1316,17 @@ app.get('/get.php', (req, res) => {
     const episodes = contentData.seriesEpisodes?.[serie.series_id]?.episodes || {};
     Object.keys(episodes).forEach(season => {
       episodes[season].forEach(ep => {
-        const name = \`\${serie.name} S\${String(season).padStart(2,'0')}E\${String(ep.episode_num).padStart(2,'0')} \${ep.title}\`;
-        m3u += \`#EXTINF:-1 tvg-logo="\${serie.cover}" group-title="📺 \${serie.name}",\${name}\n\`;
-        m3u += \`\${baseUrl}/series/\${username}/\${password}/\${ep.id}.\${ep.container_extension}\n\n\`;
+        const name = `${serie.name} S${String(season).padStart(2,'0')}E${String(ep.episode_num).padStart(2,'0')} ${ep.title}`;
+        m3u += `#EXTINF:-1 tvg-logo="${serie.cover}" group-title="📺 ${serie.name}",${name}\n`;
+        m3u += `${baseUrl}/series/${username}/${password}/${ep.id}.${ep.container_extension}\n\n`;
       });
     });
   });
   
   // Movies
   (contentData.movies || []).forEach(movie => {
-    m3u += \`#EXTINF:-1 tvg-logo="\${movie.stream_icon}" group-title="🎬 Películas",\${movie.name}\n\`;
-    m3u += \`\${baseUrl}/movie/\${username}/\${password}/\${movie.stream_id}.\${movie.container_extension}\n\n\`;
+    m3u += `#EXTINF:-1 tvg-logo="${movie.stream_icon}" group-title="🎬 Películas",${movie.name}\n`;
+    m3u += `${baseUrl}/movie/${username}/${password}/${movie.stream_id}.${movie.container_extension}\n\n`;
   });
   
   res.setHeader('Content-Type', 'audio/x-mpegurl');
@@ -962,11 +1387,11 @@ loadDataFromGitHub().then(() => {
     console.log('='.repeat(50));
     console.log('🚀 Xtream UI Server Started');
     console.log('='.repeat(50));
-    console.log(\`📍 Port: \${port}\`);
-    console.log(\`👤 User: \${CONFIG.auth.username}\`);
-    console.log(\`🔑 Pass: \${CONFIG.auth.password}\`);
-    console.log(\`🎬 Movies: \${contentData.movies?.length || 0}\`);
-    console.log(\`📺 Series: \${contentData.series?.length || 0}\`);
+    console.log(`📍 Port: ${port}`);
+    console.log(`👤 User: ${CONFIG.auth.username}`);
+    console.log(`🔑 Pass: ${CONFIG.auth.password}`);
+    console.log(`🎬 Movies: ${contentData.movies?.length || 0}`);
+    console.log(`📺 Series: ${contentData.series?.length || 0}`);
     console.log('='.repeat(50));
   });
 });
@@ -978,150 +1403,4 @@ process.on('uncaughtException', (error) => {
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-});}
-                    
-                    <div className="space-y-4">
-                      {results.map(item => (
-                        <SearchResult key={item.id} item={item} tab={tab} onSelect={fetchFullDetails} />
-                      ))}
-                    </div>
-                  </>
-                )}
-                
-                {view === 'library' && (
-                  <div className="space-y-4">
-                    {(tab === 'movies' ? library.movies : library.series).map(item => (
-                      <LibraryItem key={item.id} item={item} onEdit={editExisting} onDelete={deleteContent} />
-                    ))}
-                  </div>
-                )}
-                
-                {editingItem && <ContentEditor item={editingItem} setItem={setEditingItem} onSave={saveContent} onCancel={() => setEditingItem(null)} />}
-              </div>
-            </div>
-          );
-        };
-        
-        const SearchResult = ({ item, tab, onSelect }) => {
-          const title = tab === 'movies' ? item.title : item.name;
-          const poster = item.poster_path ? \`https://image.tmdb.org/t/p/w200\${item.poster_path}\` : 'https://via.placeholder.com/200x300?text=No+Image';
-          
-          return (
-            <div className="bg-white rounded-lg shadow-md p-4">
-              <div className="flex gap-4">
-                <img src={poster} alt={title} className="w-24 h-36 object-cover rounded" />
-                <div className="flex-1">
-                  <h3 className="font-bold text-lg mb-1">{title}</h3>
-                  <p className="text-sm text-gray-600 mb-2">⭐ {item.vote_average?.toFixed(1) || 'N/A'} • {tab === 'movies' ? item.release_date?.split('-')[0] : item.first_air_date?.split('-')[0]}</p>
-                  <p className="text-sm text-gray-700 mb-3 line-clamp-2">{item.overview || 'Sin descripción'}</p>
-                  <button onClick={() => onSelect(item)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">
-                    ✏️ Editar y Agregar
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        };
-        
-        const LibraryItem = ({ item, onEdit, onDelete }) => {
-          return (
-            <div className="bg-white rounded-lg shadow-md p-4">
-              <div className="flex gap-4">
-                <img src={item.poster} alt={item.name} className="w-24 h-36 object-cover rounded" />
-                <div className="flex-1">
-                  <h3 className="font-bold text-lg mb-1">{item.name}</h3>
-                  <p className="text-sm text-gray-600 mb-2">⭐ {item.rating?.toFixed(1)} • {item.year}</p>
-                  <p className="text-sm text-gray-700 mb-3 line-clamp-2">{item.overview}</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => onEdit(item)} className="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">
-                      ✏️ Editar
-                    </button>
-                    <button onClick={() => onDelete(item)} className="bg-red-500 text-white px-4 py-2 rounded text-sm hover:bg-red-600">
-                      🗑️ Eliminar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        };
-        
-        const ContentEditor = ({ item, setItem, onSave, onCancel }) => {
-          const [selectedSeason, setSelectedSeason] = useState(0);
-          
-          const updateField = (field, value) => {
-            setItem({ ...item, [field]: value });
-          };
-          
-          const updateEpisode = (seasonIdx, epIdx, field, value) => {
-            const newSeasons = [...item.seasons];
-            newSeasons[seasonIdx].episodes[epIdx][field] = value;
-            setItem({ ...item, seasons: newSeasons });
-          };
-          
-          return (
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-2xl font-bold mb-6">{item.existingId ? 'Editar' : 'Agregar'} {item.type === 'movie' ? 'Película' : 'Serie'}</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Título</label>
-                  <input type="text" value={item.name} onChange={(e) => updateField('name', e.target.value)} className="w-full px-3 py-2 border rounded" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Año</label>
-                  <input type="text" value={item.year} onChange={(e) => updateField('year', e.target.value)} className="w-full px-3 py-2 border rounded" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Rating</label>
-                  <input type="number" step="0.1" value={item.rating} onChange={(e) => updateField('rating', parseFloat(e.target.value))} className="w-full px-3 py-2 border rounded" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Género</label>
-                  <input type="text" value={item.genre} onChange={(e) => updateField('genre', e.target.value)} className="w-full px-3 py-2 border rounded" />
-                </div>
-                {item.type === 'movie' && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Duración (min)</label>
-                      <input type="number" value={item.duration} onChange={(e) => updateField('duration', parseInt(e.target.value))} className="w-full px-3 py-2 border rounded" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Director</label>
-                      <input type="text" value={item.director} onChange={(e) => updateField('director', e.target.value)} className="w-full px-3 py-2 border rounded" />
-                    </div>
-                  </>
-                )}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-2">Reparto</label>
-                  <input type="text" value={item.cast} onChange={(e) => updateField('cast', e.target.value)} className="w-full px-3 py-2 border rounded" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-2">Sinopsis</label>
-                  <textarea value={item.overview} onChange={(e) => updateField('overview', e.target.value)} rows="3" className="w-full px-3 py-2 border rounded" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Poster URL</label>
-                  <input type="text" value={item.poster} onChange={(e) => updateField('poster', e.target.value)} className="w-full px-3 py-2 border rounded" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Backdrop URL</label>
-                  <input type="text" value={item.backdrop} onChange={(e) => updateField('backdrop', e.target.value)} className="w-full px-3 py-2 border rounded" />
-                </div>
-                {item.type === 'movie' && (
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-2">URL del Video</label>
-                    <input type="text" value={item.url} onChange={(e) => updateField('url', e.target.value)} placeholder="https://..." className="w-full px-3 py-2 border rounded" />
-                  </div>
-                )}
-              </div>
-              
-              {item.type === 'series' && item.seasons && (
-                <div className="mb-6">
-                  <h3 className="text-xl font-bold mb-4">Temporadas y Episodios</h3>
-                  <div className="flex gap-2 mb-4 overflow-x-auto">
-                    {item.seasons.map((season, idx) => (
-                      <button key={idx} onClick={() => setSelectedSeason(idx)} className={\`px-4 py-2 rounded whitespace-nowrap \${selectedSeason === idx ? 'bg-blue-600 text-white' : 'bg-gray-200'}\`}>
-                        Temporada {season.season_number} ({season.episodes.length} eps)
-                      </button>
-                    )
+});
