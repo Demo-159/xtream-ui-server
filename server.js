@@ -109,37 +109,6 @@ async function translateToSpanish(text) {
   return text;
 }
 
-// Función para acortar sinopsis si es muy larga
-function truncatePlot(plot, maxLength = 300) {
-  if (!plot || plot === 'N/A') return '';
-  if (plot.length <= maxLength) return plot;
-  
-  // Buscar el último punto antes del límite
-  const truncated = plot.substring(0, maxLength);
-  const lastPeriod = truncated.lastIndexOf('.');
-  
-  if (lastPeriod > maxLength * 0.7) {
-    return truncated.substring(0, lastPeriod + 1);
-  }
-  
-  return truncated.substring(0, maxLength - 3) + '...';
-}
-
-// Función para obtener backdrop de mejor calidad
-function getBackdropUrl(poster) {
-  if (!poster || poster === 'N/A') {
-    return 'https://via.placeholder.com/1920x1080/1a1a2e/eee?text=Sin+Backdrop';
-  }
-  
-  // Si es de IMDb, intentar obtener una versión de mayor resolución
-  if (poster.includes('media-amazon.com')) {
-    // Cambiar a una resolución más alta
-    return poster.replace(/\._V1_.*\.jpg/, '._V1_SX1920_.jpg');
-  }
-  
-  return poster;
-}
-
 // OMDb API Functions
 async function searchOMDb(query, type = 'movie') {
   try {
@@ -160,12 +129,9 @@ async function searchOMDb(query, type = 'movie') {
           const plotES = await translateToSpanish(detail.data.Plot);
           const genreES = await translateToSpanish(detail.data.Genre);
           
-          // Acortar sinopsis si es muy larga
-          const truncatedPlot = truncatePlot(plotES, 300);
-          
           results.push({
             ...detail.data,
-            Plot: truncatedPlot,
+            Plot: plotES,
             PlotOriginal: detail.data.Plot,
             Genre: genreES,
             GenreOriginal: detail.data.Genre
@@ -425,17 +391,6 @@ app.get('/admin', (req, res) => {
       gap: 15px;
     }
     
-    .char-counter {
-      font-size: 12px;
-      color: #999;
-      text-align: right;
-      margin-top: 5px;
-    }
-    .char-counter.warning {
-      color: #ff9800;
-      font-weight: bold;
-    }
-    
     @media (max-width: 768px) {
       .grid-2 { grid-template-columns: 1fr; }
       .search-results { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
@@ -483,9 +438,8 @@ app.get('/admin', (req, res) => {
           </div>
           
           <div class="form-group">
-            <label>Sinopsis (máximo 300 caracteres recomendado):</label>
-            <textarea id="movie-plot" maxlength="500" oninput="updateCharCount('movie-plot', 'movie-plot-count', 300)"></textarea>
-            <div id="movie-plot-count" class="char-counter">0 / 500 caracteres</div>
+            <label>Sinopsis:</label>
+            <textarea id="movie-plot"></textarea>
           </div>
           
           <div class="grid-2">
@@ -512,41 +466,13 @@ app.get('/admin', (req, res) => {
           
           <div class="grid-2">
             <div class="form-group">
-              <label>Clasificación por edad:</label>
-              <select id="movie-age">
-                <option value="">Sin clasificar</option>
-                <option value="G">G - Todos los públicos</option>
-                <option value="PG">PG - Se recomienda orientación</option>
-                <option value="PG-13">PG-13 - Mayores de 13 años</option>
-                <option value="R">R - Restringido (mayores de 17)</option>
-                <option value="NC-17">NC-17 - Solo adultos</option>
-                <option value="TV-Y">TV-Y - Todos los niños</option>
-                <option value="TV-Y7">TV-Y7 - Mayores de 7 años</option>
-                <option value="TV-G">TV-G - Audiencia general</option>
-                <option value="TV-PG">TV-PG - Orientación parental</option>
-                <option value="TV-14">TV-14 - Mayores de 14 años</option>
-                <option value="TV-MA">TV-MA - Solo adultos</option>
-              </select>
+              <label>URL Poster:</label>
+              <input type="url" id="movie-poster">
             </div>
             <div class="form-group">
-              <label>Duración (minutos):</label>
-              <input type="number" id="movie-duration" min="1" value="120" placeholder="120">
+              <label>URL Video *:</label>
+              <input type="url" id="movie-url" required>
             </div>
-          </div>
-          
-          <div class="form-group">
-            <label>URL Poster (caratula):</label>
-            <input type="url" id="movie-poster">
-          </div>
-          
-          <div class="form-group">
-            <label>URL Backdrop (imagen de fondo de alta resolución):</label>
-            <input type="url" id="movie-backdrop" placeholder="Si se deja vacío, se usará el poster">
-          </div>
-          
-          <div class="form-group">
-            <label>URL Video *:</label>
-            <input type="url" id="movie-url" required>
           </div>
           
           <div class="form-group">
@@ -584,9 +510,8 @@ app.get('/admin', (req, res) => {
           </div>
           
           <div class="form-group">
-            <label>Sinopsis (máximo 300 caracteres recomendado):</label>
-            <textarea id="series-plot" maxlength="500" oninput="updateCharCount('series-plot', 'series-plot-count', 300)"></textarea>
-            <div id="series-plot-count" class="char-counter">0 / 500 caracteres</div>
+            <label>Sinopsis:</label>
+            <textarea id="series-plot"></textarea>
           </div>
           
           <div class="grid-2">
@@ -611,38 +536,9 @@ app.get('/admin', (req, res) => {
             </div>
           </div>
           
-          <div class="grid-2">
-            <div class="form-group">
-              <label>Clasificación por edad:</label>
-              <select id="series-age">
-                <option value="">Sin clasificar</option>
-                <option value="G">G - Todos los públicos</option>
-                <option value="PG">PG - Se recomienda orientación</option>
-                <option value="PG-13">PG-13 - Mayores de 13 años</option>
-                <option value="R">R - Restringido (mayores de 17)</option>
-                <option value="NC-17">NC-17 - Solo adultos</option>
-                <option value="TV-Y">TV-Y - Todos los niños</option>
-                <option value="TV-Y7">TV-Y7 - Mayores de 7 años</option>
-                <option value="TV-G">TV-G - Audiencia general</option>
-                <option value="TV-PG">TV-PG - Orientación parental</option>
-                <option value="TV-14">TV-14 - Mayores de 14 años</option>
-                <option value="TV-MA">TV-MA - Solo adultos</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Duración episodio (minutos):</label>
-              <input type="number" id="series-episode-duration" min="1" value="45" placeholder="45">
-            </div>
-          </div>
-          
           <div class="form-group">
-            <label>URL Poster (caratula):</label>
+            <label>URL Poster:</label>
             <input type="url" id="series-poster">
-          </div>
-          
-          <div class="form-group">
-            <label>URL Backdrop (imagen de fondo de alta resolución):</label>
-            <input type="url" id="series-backdrop" placeholder="Si se deja vacío, se usará el poster">
           </div>
           
           <input type="hidden" id="series-edit-id">
@@ -674,22 +570,6 @@ app.get('/admin', (req, res) => {
 
   <script>
     let currentSeriesId = null;
-    
-    function updateCharCount(textareaId, counterId, recommended) {
-      const textarea = document.getElementById(textareaId);
-      const counter = document.getElementById(counterId);
-      const length = textarea.value.length;
-      const maxLength = textarea.getAttribute('maxlength');
-      
-      counter.textContent = \`\${length} / \${maxLength} caracteres\`;
-      
-      if (length > recommended) {
-        counter.classList.add('warning');
-        counter.textContent += \` (⚠️ Se recomienda máximo \${recommended})\`;
-      } else {
-        counter.classList.remove('warning');
-      }
-    }
     
     function showTab(tab, element) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -738,7 +618,6 @@ app.get('/admin', (req, res) => {
             <p>📅 \${item.Year}</p>
             <p>🎭 \${item.Genre || 'N/A'}</p>
             <p>⭐ \${item.imdbRating || 'N/A'}</p>
-            <p>🔞 \${item.Rated || 'N/A'}</p>
           \`;
           div.onclick = () => fillMovieForm(item);
           resultsDiv.appendChild(div);
@@ -753,42 +632,13 @@ app.get('/admin', (req, res) => {
     function fillMovieForm(data) {
       document.getElementById('movie-title').value = data.Title || '';
       document.getElementById('movie-year').value = data.Year || '';
-      
-      const plot = data.Plot || '';
-      document.getElementById('movie-plot').value = plot;
-      updateCharCount('movie-plot', 'movie-plot-count', 300);
-      
+      document.getElementById('movie-plot').value = data.Plot || '';
       document.getElementById('movie-director').value = data.Director || '';
       document.getElementById('movie-cast').value = data.Actors || '';
       document.getElementById('movie-genre').value = data.Genre || '';
       document.getElementById('movie-rating').value = data.imdbRating || '7.0';
       document.getElementById('movie-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
       document.getElementById('movie-imdb').value = data.imdbID || '';
-      
-      // Configurar clasificación por edad
-      const rated = data.Rated || '';
-      const ageSelect
-const ageSelect = document.getElementById('movie-age');
-      if (rated && rated !== 'N/A') {
-        ageSelect.value = rated;
-      }
-      
-      // Configurar duración
-      if (data.Runtime && data.Runtime !== 'N/A') {
-        const runtime = parseInt(data.Runtime.replace(/\D/g, ''));
-        if (!isNaN(runtime)) {
-          document.getElementById('movie-duration').value = runtime;
-        }
-      }
-      
-      // Intentar obtener backdrop de mejor calidad
-      if (data.Poster && data.Poster !== 'N/A') {
-        let backdropUrl = data.Poster;
-        if (backdropUrl.includes('media-amazon.com')) {
-          backdropUrl = backdropUrl.replace(/\._V1_.*\.jpg/, '._V1_SX1920_.jpg');
-        }
-        document.getElementById('movie-backdrop').value = backdropUrl;
-      }
       
       showAlert('Formulario rellenado. Añade la URL del video y guarda.', 'success');
       document.getElementById('movie-url').focus();
@@ -824,7 +674,6 @@ const ageSelect = document.getElementById('movie-age');
             <p>📅 \${item.Year}</p>
             <p>🎭 \${item.Genre || 'N/A'}</p>
             <p>⭐ \${item.imdbRating || 'N/A'}</p>
-            <p>🔞 \${item.Rated || 'N/A'}</p>
           \`;
           div.onclick = () => fillSeriesForm(item);
           resultsDiv.appendChild(div);
@@ -839,40 +688,12 @@ const ageSelect = document.getElementById('movie-age');
     function fillSeriesForm(data) {
       document.getElementById('series-title').value = data.Title || '';
       document.getElementById('series-year').value = data.Year?.split('–')[0] || '';
-      
-      const plot = data.Plot || '';
-      document.getElementById('series-plot').value = plot;
-      updateCharCount('series-plot', 'series-plot-count', 300);
-      
+      document.getElementById('series-plot').value = data.Plot || '';
       document.getElementById('series-director').value = data.Director || '';
       document.getElementById('series-cast').value = data.Actors || '';
       document.getElementById('series-genre').value = data.Genre || '';
       document.getElementById('series-rating').value = data.imdbRating || '8.0';
       document.getElementById('series-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
-      
-      // Configurar clasificación por edad
-      const rated = data.Rated || '';
-      const ageSelect = document.getElementById('series-age');
-      if (rated && rated !== 'N/A') {
-        ageSelect.value = rated;
-      }
-      
-      // Configurar duración de episodio
-      if (data.Runtime && data.Runtime !== 'N/A') {
-        const runtime = parseInt(data.Runtime.replace(/\D/g, ''));
-        if (!isNaN(runtime)) {
-          document.getElementById('series-episode-duration').value = runtime;
-        }
-      }
-      
-      // Intentar obtener backdrop de mejor calidad
-      if (data.Poster && data.Poster !== 'N/A') {
-        let backdropUrl = data.Poster;
-        if (backdropUrl.includes('media-amazon.com')) {
-          backdropUrl = backdropUrl.replace(/\._V1_.*\.jpg/, '._V1_SX1920_.jpg');
-        }
-        document.getElementById('series-backdrop').value = backdropUrl;
-      }
       
       showAlert('Formulario rellenado. Guarda la serie.', 'success');
     }
@@ -881,12 +702,6 @@ const ageSelect = document.getElementById('movie-age');
       e.preventDefault();
       
       const editId = document.getElementById('movie-edit-id').value;
-      const duration = document.getElementById('movie-duration').value;
-      const durationSecs = duration ? parseInt(duration) * 60 : 7200;
-      
-      const poster = document.getElementById('movie-poster').value;
-      const backdrop = document.getElementById('movie-backdrop').value || poster;
-      
       const movieData = {
         name: document.getElementById('movie-title').value,
         year: document.getElementById('movie-year').value,
@@ -895,13 +710,9 @@ const ageSelect = document.getElementById('movie-age');
         cast: document.getElementById('movie-cast').value,
         genre: document.getElementById('movie-genre').value,
         rating: document.getElementById('movie-rating').value,
-        age: document.getElementById('movie-age').value,
-        poster: poster,
-        backdrop: backdrop,
+        poster: document.getElementById('movie-poster').value,
         url: document.getElementById('movie-url').value,
-        imdb: document.getElementById('movie-imdb').value,
-        duration: duration,
-        duration_secs: durationSecs
+        imdb: document.getElementById('movie-imdb').value
       };
       
       if (editId) {
@@ -932,11 +743,6 @@ const ageSelect = document.getElementById('movie-age');
       e.preventDefault();
       
       const editId = document.getElementById('series-edit-id').value;
-      const episodeDuration = document.getElementById('series-episode-duration').value;
-      
-      const poster = document.getElementById('series-poster').value;
-      const backdrop = document.getElementById('series-backdrop').value || poster;
-      
       const seriesData = {
         name: document.getElementById('series-title').value,
         year: document.getElementById('series-year').value,
@@ -945,10 +751,7 @@ const ageSelect = document.getElementById('movie-age');
         cast: document.getElementById('series-cast').value,
         genre: document.getElementById('series-genre').value,
         rating: document.getElementById('series-rating').value,
-        age: document.getElementById('series-age').value,
-        poster: poster,
-        backdrop: backdrop,
-        episode_duration: episodeDuration
+        poster: document.getElementById('series-poster').value
       };
       
       if (editId) {
@@ -980,18 +783,14 @@ const ageSelect = document.getElementById('movie-age');
       document.getElementById('movie-form').reset();
       document.getElementById('movie-edit-id').value = '';
       document.getElementById('movie-rating').value = '7.0';
-      document.getElementById('movie-duration').value = '120';
-      updateCharCount('movie-plot', 'movie-plot-count', 300);
     }
     
     function resetSeriesForm() {
       document.getElementById('series-form').reset();
       document.getElementById('series-edit-id').value = '';
       document.getElementById('series-rating').value = '8.0';
-      document.getElementById('series-episode-duration').value = '45';
       document.getElementById('season-manager').style.display = 'none';
       currentSeriesId = null;
-      updateCharCount('series-plot', 'series-plot-count', 300);
     }
     
     async function loadSeasons(seriesId) {
@@ -1130,12 +929,11 @@ const ageSelect = document.getElementById('movie-age');
           data.movies.forEach(movie => {
             const div = document.createElement('div');
             div.className = 'content-item';
-            const ageRating = movie.age ? \`🔞 \${movie.age} | \` : '';
             div.innerHTML = \`
               <img src="\${movie.stream_icon || 'https://via.placeholder.com/80x120?text=Sin+Poster'}" alt="\${movie.name}">
               <div class="content-item-info">
                 <h3>\${movie.name}</h3>
-                <p>⭐ \${movie.rating || 'N/A'} | \${ageRating}🎭 \${movie.genre || 'N/A'}</p>
+                <p>⭐ \${movie.rating || 'N/A'} | 🎭 \${movie.genre || 'N/A'}</p>
                 <p style="font-size: 12px; color: #999;">\${movie.plot ? movie.plot.substring(0, 100) + '...' : 'Sin sinopsis'}</p>
               </div>
               <div class="content-item-actions">
@@ -1148,4 +946,865 @@ const ageSelect = document.getElementById('movie-age');
         }
         
         // Series
-        const 
+        const seriesList = document.getElementById('series-list');
+        seriesList.innerHTML = '';
+        
+        if (data.series.length === 0) {
+          seriesList.innerHTML = '<p style="padding: 20px; text-align: center; color: #999;">No hay series. Ve a la pestaña "📺 Series" para agregar.</p>';
+        } else {
+          data.series.forEach(series => {
+            const totalEpisodes = series.seasons ? series.seasons.reduce((acc, s) => acc + (s.episode_count || 0), 0) : 0;
+            const div = document.createElement('div');
+            div.className = 'content-item';
+            div.innerHTML = \`
+              <img src="\${series.cover || 'https://via.placeholder.com/80x120?text=Sin+Poster'}" alt="\${series.name}">
+              <div class="content-item-info">
+                <h3>\${series.name}</h3>
+                <p>⭐ \${series.rating || 'N/A'} | 🎭 \${series.genre || 'N/A'}</p>
+                <p style="font-size: 12px; color: #999;">📺 \${series.seasons?.length || 0} temporadas | 🎬 \${totalEpisodes} episodios</p>
+              </div>
+              <div class="content-item-actions">
+                <button onclick="editSeries(\${series.series_id})">✏️ Editar</button>
+                <button onclick="manageSeries(\${series.series_id})">📋 Episodios</button>
+                <button class="danger" onclick="deleteSeries(\${series.series_id})">🗑️</button>
+              </div>
+            \`;
+            seriesList.appendChild(div);
+          });
+        }
+      } catch (error) {
+        showAlert('❌ Error cargando contenido', 'error');
+      }
+    }
+    
+    async function editMovie(id) {
+      try {
+        const res = await fetch(\`/api/movie/\${id}\`);
+        const movie = await res.json();
+        
+        document.getElementById('movie-edit-id').value = id;
+        document.getElementById('movie-title').value = movie.name?.replace(/\s*\(\d{4}\)$/, '') || '';
+        document.getElementById('movie-year').value = movie.year || '';
+        document.getElementById('movie-plot').value = movie.plot || '';
+        document.getElementById('movie-director').value = movie.director || '';
+        document.getElementById('movie-cast').value = movie.cast || '';
+        document.getElementById('movie-genre').value = movie.genre || '';
+        document.getElementById('movie-rating').value = movie.rating || '7.0';
+        document.getElementById('movie-poster').value = movie.stream_icon || '';
+        document.getElementById('movie-url').value = movie.direct_source || '';
+        document.getElementById('movie-imdb').value = movie.tmdb_id || '';
+        
+        document.querySelectorAll('.tab')[0].click();
+        showAlert('✏️ Editando película. Modifica y guarda.', 'success');
+      } catch (error) {
+        showAlert('❌ Error cargando película', 'error');
+      }
+    }
+    
+    async function deleteMovie(id) {
+      if (!confirm('¿Eliminar esta película? Esta acción no se puede deshacer.')) return;
+      
+      try {
+        const res = await fetch(\`/api/movie/\${id}\`, { method: 'DELETE' });
+        if (res.ok) {
+          showAlert('✅ Película eliminada y sincronizada con GitHub', 'success');
+          loadContentList();
+        } else {
+          showAlert('❌ Error al eliminar', 'error');
+        }
+      } catch (error) {
+        showAlert('❌ Error de conexión', 'error');
+      }
+    }
+    
+    async function editSeries(id) {
+      try {
+        const res = await fetch(\`/api/series/\${id}\`);
+        const series = await res.json();
+        
+        document.getElementById('series-edit-id').value = id;
+        document.getElementById('series-title').value = series.name || '';
+        document.getElementById('series-year').value = series.releaseDate?.split('-')[0] || '';
+        document.getElementById('series-plot').value = series.plot || '';
+        document.getElementById('series-director').value = series.director || '';
+        document.getElementById('series-cast').value = series.cast || '';
+        document.getElementById('series-genre').value = series.genre || '';
+        document.getElementById('series-rating').value = series.rating || '8.0';
+        document.getElementById('series-poster').value = series.cover || '';
+        
+        currentSeriesId = id;
+        document.getElementById('season-manager').style.display = 'block';
+        loadSeasons(id);
+        
+        document.querySelectorAll('.tab')[1].click();
+        showAlert('✏️ Editando serie. Modifica y guarda.', 'success');
+      } catch (error) {
+        showAlert('❌ Error cargando serie', 'error');
+      }
+    }
+    
+    async function manageSeries(id) {
+      currentSeriesId = id;
+      document.getElementById('series-edit-id').value = id;
+      document.getElementById('season-manager').style.display = 'block';
+      loadSeasons(id);
+      document.querySelectorAll('.tab')[1].click();
+      showAlert('Gestiona las temporadas y episodios de la serie', 'success');
+    }
+    
+    async function deleteSeries(id) {
+      if (!confirm('¿Eliminar esta serie y todos sus episodios? Esta acción no se puede deshacer.')) return;
+      
+      try {
+        const res = await fetch(\`/api/series/\${id}\`, { method: 'DELETE' });
+        if (res.ok) {
+          showAlert('✅ Serie eliminada y sincronizada con GitHub', 'success');
+          loadContentList();
+        } else {
+          showAlert('❌ Error al eliminar', 'error');
+        }
+      } catch (error) {
+        showAlert('❌ Error de conexión', 'error');
+      }
+    }
+    
+    // Cargar contenido al abrir la página
+    if (window.location.hash === '#list') {
+      document.querySelectorAll('.tab')[2].click();
+    }
+  </script>
+</body>
+</html>`);
+});
+
+// API Endpoints
+app.get('/api/search', async (req, res) => {
+  const { query, type = 'movie' } = req.query;
+  try {
+    const results = await searchOMDb(query, type);
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/movie', async (req, res) => {
+  try {
+    const { name, year, plot, director, cast, genre, rating, poster, url, imdb } = req.body;
+    
+    const newId = contentData.movies.length > 0 
+      ? Math.max(...contentData.movies.map(m => m.stream_id)) + 1 
+      : 1;
+    
+    const ratingValue = parseFloat(rating || '7.0');
+    
+    const movie = {
+      stream_id: newId,
+      num: newId,
+      name: year ? `${name} (${year})` : name,
+      title: year ? `${name} (${year})` : name,
+      stream_type: "movie",
+      stream_icon: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
+      rating: ratingValue.toString(),
+      rating_5based: ratingValue / 2,
+      added: Math.floor(Date.now() / 1000).toString(),
+      category_id: "1",
+      container_extension: url.split('.').pop().split('?')[0] || "mp4",
+      custom_sid: "",
+      direct_source: url,
+      genre: genre || '',
+      plot: plot || '',
+      director: director || '',
+      cast: cast || '',
+      actors: cast || '',
+      year: year || '',
+      releasedate: year ? `${year}-01-01` : '',
+      youtube_trailer: '',
+      tmdb_id: imdb || '',
+      o_name: name,
+      cover_big: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
+      movie_image: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
+      backdrop_path: [poster || ''],
+      age: '',
+      country: '',
+      duration: '7200',
+      duration_secs: 7200,
+      video: {
+        codec: 'h264',
+        bitrate: 2500
+      },
+      audio: {
+        codec: 'aac',
+        bitrate: 128
+      }
+    };
+    
+    contentData.movies.push(movie);
+    await saveDataToGitHub();
+    
+    res.json({ success: true, movie });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/movie/:id', (req, res) => {
+  const movie = contentData.movies.find(m => m.stream_id == req.params.id);
+  if (movie) {
+    res.json(movie);
+  } else {
+    res.status(404).json({ error: 'Movie not found' });
+  }
+});
+
+app.put('/api/movie', async (req, res) => {
+  try {
+    const { id, name, year, plot, director, cast, genre, rating, poster, url, imdb } = req.body;
+    
+    const index = contentData.movies.findIndex(m => m.stream_id == id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Movie not found' });
+    }
+    
+    const ratingValue = parseFloat(rating || '7.0');
+    
+    contentData.movies[index] = {
+      ...contentData.movies[index],
+      name: year ? `${name} (${year})` : name,
+      title: year ? `${name} (${year})` : name,
+      o_name: name,
+      stream_icon: poster || contentData.movies[index].stream_icon,
+      cover_big: poster || contentData.movies[index].cover_big,
+      movie_image: poster || contentData.movies[index].movie_image,
+      rating: ratingValue.toString(),
+      rating_5based: ratingValue / 2,
+      container_extension: url.split('.').pop().split('?')[0] || "mp4",
+      direct_source: url,
+      genre: genre || '',
+      plot: plot || '',
+      director: director || '',
+      cast: cast || '',
+      actors: cast || '',
+      year: year || '',
+      releasedate: year ? `${year}-01-01` : contentData.movies[index].releasedate,
+      tmdb_id: imdb || ''
+    };
+    
+    await saveDataToGitHub();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/movie/:id', async (req, res) => {
+  try {
+    contentData.movies = contentData.movies.filter(m => m.stream_id != req.params.id);
+    await saveDataToGitHub();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/series', async (req, res) => {
+  try {
+    const { name, year, plot, director, cast, genre, rating, poster } = req.body;
+    
+    const newId = contentData.series.length > 0 
+      ? Math.max(...contentData.series.map(s => s.series_id)) + 1 
+      : 1;
+    
+    const ratingValue = parseFloat(rating || '8.0');
+    
+    const series = {
+      series_id: newId,
+      name: name,
+      title: name,
+      cover: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
+      plot: plot || '',
+      cast: cast || '',
+      director: director || '',
+      genre: genre || '',
+      releaseDate: year ? `${year}-01-01` : new Date().toISOString().split('T')[0],
+      last_modified: Math.floor(Date.now() / 1000).toString(),
+      rating: ratingValue.toString(),
+      rating_5based: ratingValue / 2,
+      backdrop_path: [poster || 'https://via.placeholder.com/1280x720?text=Sin+Backdrop'],
+      youtube_trailer: "",
+      episode_run_time: "45",
+      category_id: "1",
+      category_ids: [1],
+      num: newId,
+      seasons: [],
+      episodes: {}
+    };
+    
+    contentData.series.push(series);
+    await saveDataToGitHub();
+    
+    res.json({ success: true, series_id: newId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/series/:id', (req, res) => {
+  const series = contentData.series.find(s => s.series_id == req.params.id);
+  if (series) {
+    res.json(series);
+  } else {
+    res.status(404).json({ error: 'Series not found' });
+  }
+});
+
+app.put('/api/series', async (req, res) => {
+  try {
+    const { id, name, year, plot, director, cast, genre, rating, poster } = req.body;
+    
+    const index = contentData.series.findIndex(s => s.series_id == id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Series not found' });
+    }
+    
+    const ratingValue = parseFloat(rating || '8.0');
+    
+    contentData.series[index] = {
+      ...contentData.series[index],
+      name: name,
+      title: name,
+      cover: poster || contentData.series[index].cover,
+      plot: plot || '',
+      cast: cast || '',
+      director: director || '',
+      genre: genre || '',
+      releaseDate: year ? `${year}-01-01` : contentData.series[index].releaseDate,
+      rating: ratingValue.toString(),
+      rating_5based: ratingValue / 2,
+      backdrop_path: [poster || contentData.series[index].backdrop_path[0]]
+    };
+    
+    await saveDataToGitHub();
+    res.json({ success: true, series_id: id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/series/:id', async (req, res) => {
+  try {
+    contentData.series = contentData.series.filter(s => s.series_id != req.params.id);
+    await saveDataToGitHub();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/series/:id/seasons', (req, res) => {
+  const series = contentData.series.find(s => s.series_id == req.params.id);
+  if (series) {
+    res.json({ 
+      seasons: series.seasons || [], 
+      episodes: series.episodes || {} 
+    });
+  } else {
+    res.status(404).json({ error: 'Series not found' });
+  }
+});
+
+app.post('/api/series/:id/seasons', async (req, res) => {
+  try {
+    const { season_number } = req.body;
+    const series = contentData.series.find(s => s.series_id == req.params.id);
+    
+    if (!series) {
+      return res.status(404).json({ error: 'Series not found' });
+    }
+    
+    if (!series.seasons) series.seasons = [];
+    if (!series.episodes) series.episodes = {};
+    
+    const exists = series.seasons.find(s => s.season_number === season_number);
+    if (exists) {
+      return res.status(400).json({ error: 'Season already exists' });
+    }
+    
+    const season = {
+      season_number: season_number,
+      name: `Temporada ${season_number}`,
+      episode_count: 0,
+      cover: series.cover,
+      cover_big: series.cover,
+      air_date: new Date().toISOString().split('T')[0]
+    };
+    
+    series.seasons.push(season);
+    series.seasons.sort((a, b) => a.season_number - b.season_number);
+    series.episodes[season_number] = [];
+    
+    await saveDataToGitHub();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/series/:id/seasons/:season/episodes', (req, res) => {
+  const series = contentData.series.find(s => s.series_id == req.params.id);
+  if (series && series.episodes && series.episodes[req.params.season]) {
+    res.json(series.episodes[req.params.season]);
+  } else {
+    res.json([]);
+  }
+});
+
+app.post('/api/series/:id/seasons/:season/episodes', async (req, res) => {
+  try {
+    const { title, url, plot } = req.body;
+    const series = contentData.series.find(s => s.series_id == req.params.id);
+    
+    if (!series) {
+      return res.status(404).json({ error: 'Series not found' });
+    }
+    
+    const seasonNum = req.params.season;
+    if (!series.episodes[seasonNum]) {
+      series.episodes[seasonNum] = [];
+    }
+    
+    const episodeNum = series.episodes[seasonNum].length + 1;
+    const episodeId = `${series.series_id}${String(seasonNum).padStart(2, '0')}${String(episodeNum).padStart(2, '0')}`;
+    
+    const episode = {
+      id: episodeId,
+      episode_num: episodeNum,
+      title: title,
+      container_extension: url.split('.').pop().split('?')[0] || "mp4",
+      info: {
+        name: title,
+        season: parseInt(seasonNum),
+        episode_num: episodeNum,
+        air_date: new Date().toISOString().split('T')[0],
+        plot: plot || '',
+        duration_secs: "2700",
+        duration: "45:00",
+        rating: series.rating || "8.0",
+        cover_big: series.cover
+      },
+      direct_source: url
+    };
+    
+    series.episodes[seasonNum].push(episode);
+    
+    const seasonIndex = series.seasons.findIndex(s => s.season_number == seasonNum);
+    if (seasonIndex !== -1) {
+      series.seasons[seasonIndex].episode_count = series.episodes[seasonNum].length;
+    }
+    
+    await saveDataToGitHub();
+    res.json({ success: true, episode });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/content', (req, res) => {
+  res.json({
+    movies: contentData.movies,
+    series: contentData.series
+  });
+});
+
+// Xtream API
+function authenticate(req, res, next) {
+  const { username, password } = req.query;
+  if (username === USERNAME && password === PASSWORD) {
+    next();
+  } else {
+    res.status(401).json({ error: "Invalid credentials" });
+  }
+}
+
+app.get('/get.php', (req, res) => {
+  const { username, password, type } = req.query;
+  
+  if (username !== USERNAME || password !== PASSWORD) {
+    return res.status(401).send('#EXTM3U\n#EXTINF:-1,Error: Invalid credentials\nhttp://invalid');
+  }
+  
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  let m3uContent = '#EXTM3U x-tvg-url=""\n\n';
+  
+  if (!type || type === 'series') {
+    contentData.series.forEach(serie => {
+      if (serie.episodes) {
+        Object.keys(serie.episodes).forEach(seasonNum => {
+          const episodes = serie.episodes[seasonNum];
+          episodes.forEach(episode => {
+            const episodeName = `${serie.name} S${String(seasonNum).padStart(2, '0')}E${String(episode.episode_num).padStart(2, '0')} ${episode.title}`;
+            m3uContent += `#EXTINF:-1 tvg-id="serie_${serie.series_id}_${seasonNum}_${episode.episode_num}" tvg-name="${episodeName}" tvg-logo="${serie.cover}" group-title="📺 ${serie.name}",${episodeName}\n`;
+            m3uContent += `${baseUrl}/series/${username}/${password}/${episode.id}.${episode.container_extension}\n\n`;
+          });
+        });
+      }
+    });
+  }
+  
+  if (!type || type === 'movie') {
+    contentData.movies.forEach(movie => {
+      m3uContent += `#EXTINF:-1 tvg-id="${movie.stream_id}" tvg-name="${movie.name}" tvg-logo="${movie.stream_icon}" group-title="🎬 Películas",${movie.name}\n`;
+      m3uContent += `${baseUrl}/movie/${username}/${password}/${movie.stream_id}.${movie.container_extension}\n\n`;
+    });
+  }
+  
+  res.setHeader('Content-Type', 'audio/x-mpegurl; charset=utf-8');
+  res.setHeader('Content-Disposition', 'inline; filename="playlist.m3u"');
+  res.send(m3uContent);
+});
+
+app.get('/player_api.php', authenticate, (req, res) => {
+  const action = req.query.action;
+
+  switch (action) {
+    case 'get_vod_streams':
+      res.json(contentData.movies);
+      break;
+    
+    case 'get_vod_categories':
+      res.json(contentData.categories);
+      break;
+    
+    case 'get_vod_info':
+      const vodId = req.query.vod_id;
+      const movie = contentData.movies.find(m => m.stream_id == vodId);
+      if (movie) {
+        res.json({ 
+          info: {
+            ...movie,
+            tmdb_id: movie.tmdb_id || movie.imdb_id || '',
+            name: movie.name,
+            o_name: movie.o_name || movie.name,
+            cover_big: movie.cover_big || movie.stream_icon,
+            movie_image: movie.movie_image || movie.stream_icon,
+            releasedate: movie.releasedate || movie.year ? `${movie.year}-01-01` : '',
+            youtube_trailer: movie.youtube_trailer || '',
+            director: movie.director || '',
+            actors: movie.actors || movie.cast || '',
+            cast: movie.cast || '',
+            description: movie.plot || '',
+            plot: movie.plot || '',
+            age: movie.age || '',
+            rating: movie.rating || '7.0',
+            rating_5based: movie.rating_5based || parseFloat(movie.rating || '7.0') / 2,
+            country: movie.country || '',
+            genre: movie.genre || '',
+            duration: movie.duration || '7200',
+            duration_secs: movie.duration_secs || 7200,
+            video: movie.video || { codec: 'h264', bitrate: 2500 },
+            audio: movie.audio || { codec: 'aac', bitrate: 128 },
+            backdrop_path: movie.backdrop_path || [movie.stream_icon]
+          },
+          movie_data: {
+            stream_id: movie.stream_id,
+            name: movie.name,
+            added: movie.added,
+            category_id: movie.category_id,
+            container_extension: movie.container_extension,
+            custom_sid: movie.custom_sid || '',
+            direct_source: movie.direct_source
+          }
+        });
+      } else {
+        res.json({ error: "VOD not found" });
+      }
+      break;
+    
+    case 'get_series':
+      res.json(contentData.series);
+      break;
+    
+    case 'get_series_categories':
+      res.json(contentData.seriesCategories);
+      break;
+    
+    case 'get_series_info':
+      const seriesId = req.query.series_id;
+      const serie = contentData.series.find(s => s.series_id == seriesId);
+      
+      if (serie) {
+        res.json({
+          seasons: serie.seasons || [],
+          info: serie,
+          episodes: serie.episodes || {}
+        });
+      } else {
+        res.json({ error: "Series not found" });
+      }
+      break;
+    
+    case 'get_live_streams':
+      res.json([]);
+      break;
+    
+    case 'get_live_categories':
+      res.json([]);
+      break;
+    
+    default:
+      res.json({
+        user_info: {
+          username: USERNAME,
+          password: PASSWORD,
+          message: "API activa",
+          auth: 1,
+          status: "Active",
+          exp_date: "2099999999",
+          is_trial: "0",
+          active_cons: "0",
+          created_at: Math.floor(Date.now() / 1000).toString(),
+          max_connections: "5",
+          allowed_output_formats: ["m3u8", "ts", "rtmp"]
+        },
+        server_info: {
+          url: req.protocol + '://' + req.get('host'),
+          port: port,
+          https_port: "",
+          server_protocol: req.protocol,
+          rtmp_port: "",
+          timezone: "UTC",
+          timestamp_now: Math.floor(Date.now() / 1000),
+          time_now: new Date().toISOString()
+        }
+      });
+  }
+});
+
+app.get('/movie/:username/:password/:streamId.:ext', (req, res) => {
+  const { username, password, streamId } = req.params;
+  
+  if (username !== USERNAME || password !== PASSWORD) {
+    return res.status(401).send('Unauthorized');
+  }
+  
+  const movie = contentData.movies.find(m => m.stream_id == streamId);
+  if (movie && movie.direct_source) {
+    res.redirect(movie.direct_source);
+  } else {
+    res.status(404).send('Movie not found');
+  }
+});
+
+app.get('/series/:username/:password/:episodeId.:ext', (req, res) => {
+  const { username, password, episodeId } = req.params;
+  
+  if (username !== USERNAME || password !== PASSWORD) {
+    return res.status(401).send('Unauthorized');
+  }
+  
+  let foundEpisode = null;
+  
+  for (const serie of contentData.series) {
+    if (serie.episodes) {
+      for (const seasonNum in serie.episodes) {
+        const episode = serie.episodes[seasonNum].find(ep => ep.id === episodeId);
+        if (episode) {
+          foundEpisode = episode;
+          break;
+        }
+      }
+    }
+    if (foundEpisode) break;
+  }
+  
+  if (foundEpisode && foundEpisode.direct_source) {
+    res.redirect(foundEpisode.direct_source);
+  } else {
+    res.status(404).send('Episode not found');
+  }
+});
+
+app.get('/', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xtream API Server</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      margin: 0;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 15px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 600px;
+      width: 100%;
+    }
+    h1 {
+      color: #667eea;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .status {
+      background: #d4edda;
+      color: #155724;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 30px;
+      border: 2px solid #c3e6cb;
+    }
+    .button {
+      display: block;
+      width: 100%;
+      padding: 15px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-align: center;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 15px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    .info {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 20px;
+      border: 2px solid #dee2e6;
+    }
+    .info h3 {
+      color: #333;
+      margin-top: 0;
+      margin-bottom: 15px;
+    }
+    .info-item {
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .info-item strong {
+      color: #667eea;
+    }
+    .copy-btn {
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    .copy-btn:hover {
+      background: #5a6268;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 Xtream API Server</h1>
+    <div class="status">✅ Servidor Activo</div>
+    
+    <a href="/admin" class="button">🎛️ Ir al Panel de Administración</a>
+    
+    <div class="info">
+      <h3>📡 Configuración para TiviMate</h3>
+      <div class="info-item">
+        <strong>URL:</strong> ${req.protocol}://${req.get('host')}/player_api.php
+        <button class="copy-btn" onclick="copyToClipboard('${req.protocol}://${req.get('host')}/player_api.php')">📋 Copiar</button>
+      </div>
+      <div class="info-item">
+        <strong>Usuario:</strong> ${USERNAME}
+        <button class="copy-btn" onclick="copyToClipboard('${USERNAME}')">📋 Copiar</button>
+      </div>
+      <div class="info-item">
+        <strong>Contraseña:</strong> ${PASSWORD}
+        <button class="copy-btn" onclick="copyToClipboard('${PASSWORD}')">📋 Copiar</button>
+      </div>
+    </div>
+    
+    <div class="info" style="margin-top: 15px;">
+      <h3>🔗 Enlaces Directos</h3>
+      <div class="info-item">
+        <strong>M3U Playlist:</strong><br>
+        <a href="/get.php?username=${USERNAME}&password=${PASSWORD}" style="font-size: 12px; word-break: break-all;">
+          ${req.protocol}://${req.get('host')}/get.php?username=${USERNAME}&password=${PASSWORD}
+        </a>
+      </div>
+    </div>
+    
+    <div class="info" style="margin-top: 15px;">
+      <h3>📊 Estadísticas</h3>
+      <div class="info-item">🎬 Películas: <strong>${contentData.movies.length}</strong></div>
+      <div class="info-item">📺 Series: <strong>${contentData.series.length}</strong></div>
+      <div class="info-item">🎞️ Episodios: <strong>${contentData.series.reduce((acc, s) => acc + (s.seasons ? s.seasons.reduce((a, se) => a + (se.episode_count || 0), 0) : 0), 0)}</strong></div>
+    </div>
+  </div>
+  
+  <script>
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert('✅ Copiado al portapapeles');
+      }).catch(() => {
+        alert('❌ Error al copiar');
+      });
+    }
+  </script>
+</body>
+</html>`);
+});
+
+// Health check para Render
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    movies: contentData.movies.length,
+    series: contentData.series.length,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Iniciar servidor
+app.listen(port, async () => {
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════╗');
+  console.log('║         🎬 XTREAM API SERVER - INICIADO 🎬          ║');
+  console.log('╚══════════════════════════════════════════════════════╝');
+  console.log('');
+  console.log(`📡 Puerto: ${port}`);
+  console.log(`🌐 URL: http://localhost:${port}`);
+  console.log(`🎛️  Panel Admin: http://localhost:${port}/admin`);
+  console.log(`👤 Usuario: ${USERNAME}`);
+  console.log(`🔑 Contraseña: ${PASSWORD}`);
+  console.log('');
+  console.log('⏳ Cargando datos desde GitHub...');
+  
+  await loadDataFromGitHub();
+  
+  console.log('');
+  console.log(`✅ Servidor listo con ${contentData.movies.length} películas y ${contentData.series.length} series`);
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════╗');
+  console.log('║  💡 IMPORTANTE: Configura OMDB_KEY en variables     ║');
+  console.log('║     de entorno para usar el autocompletado          ║');
+  console.log('║     Obtén tu key gratis en: omdbapi.com/apikey.aspx ║');
+  console.log('╚══════════════════════════════════════════════════════╝');
+  console.log('');
+});
