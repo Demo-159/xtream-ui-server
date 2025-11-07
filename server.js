@@ -10,7 +10,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN || 'ghp_TXYhKUT1f8Hb02SwDCsN4aYSYQ
 const GITHUB_USER = 'Demo-159';
 const GITHUB_REPO = 'xtream-ui-server';
 const DATA_FILE = 'data.json';
-const OMDB_API_KEY = process.env.OMDB_KEY || '3e3e3e3e';
+const OMDB_API_KEY = process.env.OMDB_KEY || 'ed52d6c5a797006699cdcc63ed1208d5';
 
 // Datos iniciales
 let contentData = {
