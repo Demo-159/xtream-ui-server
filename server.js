@@ -91,6 +91,22 @@ async function saveDataToGitHub() {
   }
 }
 
+// Función para acortar sinopsis
+function truncatePlot(plot, maxLength = 300) {
+  if (!plot || plot === 'N/A') return '';
+  if (plot.length <= maxLength) return plot;
+  
+  // Buscar el último punto antes del límite
+  const truncated = plot.substring(0, maxLength);
+  const lastPeriod = truncated.lastIndexOf('.');
+  
+  if (lastPeriod > maxLength * 0.7) {
+    return truncated.substring(0, lastPeriod + 1);
+  }
+  
+  return truncated.trim() + '...';
+}
+
 // Traducir texto usando Google Translate API (gratis, sin key)
 async function translateToSpanish(text) {
   if (!text || text === 'N/A') return text;
@@ -107,6 +123,28 @@ async function translateToSpanish(text) {
   }
   
   return text;
+}
+
+// Función para obtener backdrop de TMDb (gratis, sin API key)
+async function getTMDbBackdrop(imdbId, title, year) {
+  try {
+    // Buscar en TMDb usando el título
+    const searchUrl = `https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(title)}&year=${year || ''}`;
+    const response = await axios.get(searchUrl, {
+      headers: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI4ZjQ1ZTVhMzUzNGI3NzJkMTI3NGQyNjBjNzFiNGNmNyIsInN1YiI6IjVmNWE4M2E2MzFmMDk0MDAzNjk1NjU3OCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.aOVwRgGcVKQz8dRvv9fZzq-nKvG8I7JLnLjpX-FbSe8' },
+      timeout: 5000
+    });
+    
+    if (response.data.results && response.data.results.length > 0) {
+      const item = response.data.results[0];
+      if (item.backdrop_path) {
+        return `https://image.tmdb.org/t/p/original${item.backdrop_path}`;
+      }
+    }
+  } catch (error) {
+    console.log('No se pudo obtener backdrop de TMDb');
+  }
+  return null;
 }
 
 // OMDb API Functions
@@ -129,12 +167,23 @@ async function searchOMDb(query, type = 'movie') {
           const plotES = await translateToSpanish(detail.data.Plot);
           const genreES = await translateToSpanish(detail.data.Genre);
           
+          // Acortar sinopsis
+          const plotShort = truncatePlot(plotES, 300);
+          
+          // Obtener backdrop de TMDb
+          const backdrop = await getTMDbBackdrop(
+            detail.data.imdbID, 
+            detail.data.Title, 
+            detail.data.Year
+          );
+          
           results.push({
             ...detail.data,
-            Plot: plotES,
+            Plot: plotShort,
             PlotOriginal: detail.data.Plot,
             Genre: genreES,
-            GenreOriginal: detail.data.Genre
+            GenreOriginal: detail.data.Genre,
+            BackdropPath: backdrop
           });
         }
       }
@@ -481,6 +530,7 @@ app.get('/admin', (req, res) => {
           </div>
           
           <input type="hidden" id="movie-edit-id">
+          <input type="hidden" id="movie-backdrop">
           <button type="submit">💾 Guardar Película</button>
           <button type="button" class="secondary" onclick="resetMovieForm()" style="margin-left: 10px;">🔄 Limpiar</button>
         </form>
@@ -640,6 +690,11 @@ app.get('/admin', (req, res) => {
       document.getElementById('movie-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
       document.getElementById('movie-imdb').value = data.imdbID || '';
       
+      // Almacenar backdrop si existe
+      if (data.BackdropPath) {
+        document.getElementById('movie-backdrop').value = data.BackdropPath;
+      }
+      
       showAlert('Formulario rellenado. Añade la URL del video y guarda.', 'success');
       document.getElementById('movie-url').focus();
     }
@@ -702,6 +757,8 @@ app.get('/admin', (req, res) => {
       e.preventDefault();
       
       const editId = document.getElementById('movie-edit-id').value;
+      const backdropField = document.getElementById('movie-backdrop');
+      
       const movieData = {
         name: document.getElementById('movie-title').value,
         year: document.getElementById('movie-year').value,
@@ -712,7 +769,8 @@ app.get('/admin', (req, res) => {
         rating: document.getElementById('movie-rating').value,
         poster: document.getElementById('movie-poster').value,
         url: document.getElementById('movie-url').value,
-        imdb: document.getElementById('movie-imdb').value
+        imdb: document.getElementById('movie-imdb').value,
+        backdrop: backdropField ? backdropField.value : ''
       };
       
       if (editId) {
@@ -782,6 +840,7 @@ app.get('/admin', (req, res) => {
     function resetMovieForm() {
       document.getElementById('movie-form').reset();
       document.getElementById('movie-edit-id').value = '';
+      document.getElementById('movie-backdrop').value = '';
       document.getElementById('movie-rating').value = '7.0';
     }
     
@@ -994,6 +1053,10 @@ app.get('/admin', (req, res) => {
         document.getElementById('movie-url').value = movie.direct_source || '';
         document.getElementById('movie-imdb').value = movie.tmdb_id || '';
         
+        if (movie.backdrop_path && movie.backdrop_path.length > 0) {
+          document.getElementById('movie-backdrop').value = movie.backdrop_path[0];
+        }
+        
         document.querySelectorAll('.tab')[0].click();
         showAlert('✏️ Editando película. Modifica y guarda.', 'success');
       } catch (error) {
@@ -1090,7 +1153,7 @@ app.get('/api/search', async (req, res) => {
 
 app.post('/api/movie', async (req, res) => {
   try {
-    const { name, year, plot, director, cast, genre, rating, poster, url, imdb } = req.body;
+    const { name, year, plot, director, cast, genre, rating, poster, url, imdb, backdrop } = req.body;
     
     const newId = contentData.movies.length > 0 
       ? Math.max(...contentData.movies.map(m => m.stream_id)) + 1 
@@ -1098,33 +1161,45 @@ app.post('/api/movie', async (req, res) => {
     
     const ratingValue = parseFloat(rating || '7.0');
     
+    // Acortar sinopsis si es muy larga
+    const plotShort = truncatePlot(plot, 300);
+    
+    // Generar backdrop path array
+    const backdropPaths = [];
+    if (backdrop) {
+      backdropPaths.push(backdrop);
+    } else if (poster && poster !== 'https://via.placeholder.com/300x450?text=Sin+Poster') {
+      backdropPaths.push(poster);
+    }
+    
     const movie = {
       stream_id: newId,
       num: newId,
-      name: year ? `${name} (${year})` : name,
-      title: year ? `${name} (${year})` : name,
+      name: year ? \`\${name} (\${year})\` : name,
+      title: year ? \`\${name} (\${year})\` : name,
       stream_type: "movie",
       stream_icon: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
-      rating: ratingValue.toString(),
-      rating_5based: ratingValue / 2,
+      rating: ratingValue.toFixed(1),
+      rating_5based: parseFloat((ratingValue / 2).toFixed(1)),
       added: Math.floor(Date.now() / 1000).toString(),
       category_id: "1",
       container_extension: url.split('.').pop().split('?')[0] || "mp4",
       custom_sid: "",
       direct_source: url,
       genre: genre || '',
-      plot: plot || '',
+      plot: plotShort,
+      description: plotShort,
       director: director || '',
       cast: cast || '',
       actors: cast || '',
       year: year || '',
-      releasedate: year ? `${year}-01-01` : '',
+      releasedate: year ? \`\${year}-01-01\` : '',
       youtube_trailer: '',
       tmdb_id: imdb || '',
       o_name: name,
       cover_big: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
       movie_image: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
-      backdrop_path: [poster || ''],
+      backdrop_path: backdropPaths.length > 0 ? backdropPaths : ['https://via.placeholder.com/1280x720?text=Sin+Backdrop'],
       age: '',
       country: '',
       duration: '7200',
@@ -1159,7 +1234,7 @@ app.get('/api/movie/:id', (req, res) => {
 
 app.put('/api/movie', async (req, res) => {
   try {
-    const { id, name, year, plot, director, cast, genre, rating, poster, url, imdb } = req.body;
+    const { id, name, year, plot, director, cast, genre, rating, poster, url, imdb, backdrop } = req.body;
     
     const index = contentData.movies.findIndex(m => m.stream_id == id);
     if (index === -1) {
@@ -1168,26 +1243,41 @@ app.put('/api/movie', async (req, res) => {
     
     const ratingValue = parseFloat(rating || '7.0');
     
+    // Acortar sinopsis si es muy larga
+    const plotShort = truncatePlot(plot, 300);
+    
+    // Generar backdrop path array
+    const backdropPaths = [];
+    if (backdrop) {
+      backdropPaths.push(backdrop);
+    } else if (poster && poster !== 'https://via.placeholder.com/300x450?text=Sin+Poster') {
+      backdropPaths.push(poster);
+    } else if (contentData.movies[index].backdrop_path && contentData.movies[index].backdrop_path.length > 0) {
+      backdropPaths.push(contentData.movies[index].backdrop_path[0]);
+    }
+    
     contentData.movies[index] = {
       ...contentData.movies[index],
-      name: year ? `${name} (${year})` : name,
-      title: year ? `${name} (${year})` : name,
+      name: year ? \`\${name} (\${year})\` : name,
+      title: year ? \`\${name} (\${year})\` : name,
       o_name: name,
       stream_icon: poster || contentData.movies[index].stream_icon,
       cover_big: poster || contentData.movies[index].cover_big,
       movie_image: poster || contentData.movies[index].movie_image,
-      rating: ratingValue.toString(),
-      rating_5based: ratingValue / 2,
+      rating: ratingValue.toFixed(1),
+      rating_5based: parseFloat((ratingValue / 2).toFixed(1)),
       container_extension: url.split('.').pop().split('?')[0] || "mp4",
       direct_source: url,
       genre: genre || '',
-      plot: plot || '',
+      plot: plotShort,
+      description: plotShort,
       director: director || '',
       cast: cast || '',
       actors: cast || '',
       year: year || '',
-      releasedate: year ? `${year}-01-01` : contentData.movies[index].releasedate,
-      tmdb_id: imdb || ''
+      releasedate: year ? \`\${year}-01-01\` : contentData.movies[index].releasedate,
+      tmdb_id: imdb || '',
+      backdrop_path: backdropPaths.length > 0 ? backdropPaths : contentData.movies[index].backdrop_path
     };
     
     await saveDataToGitHub();
@@ -1217,19 +1307,22 @@ app.post('/api/series', async (req, res) => {
     
     const ratingValue = parseFloat(rating || '8.0');
     
+    // Acortar sinopsis
+    const plotShort = truncatePlot(plot, 300);
+    
     const series = {
       series_id: newId,
       name: name,
       title: name,
       cover: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
-      plot: plot || '',
+      plot: plotShort,
       cast: cast || '',
       director: director || '',
       genre: genre || '',
-      releaseDate: year ? `${year}-01-01` : new Date().toISOString().split('T')[0],
+      releaseDate: year ? \`\${year}-01-01\` : new Date().toISOString().split('T')[0],
       last_modified: Math.floor(Date.now() / 1000).toString(),
-      rating: ratingValue.toString(),
-      rating_5based: ratingValue / 2,
+      rating: ratingValue.toFixed(1),
+      rating_5based: parseFloat((ratingValue / 2).toFixed(1)),
       backdrop_path: [poster || 'https://via.placeholder.com/1280x720?text=Sin+Backdrop'],
       youtube_trailer: "",
       episode_run_time: "45",
@@ -1269,18 +1362,21 @@ app.put('/api/series', async (req, res) => {
     
     const ratingValue = parseFloat(rating || '8.0');
     
+    // Acortar sinopsis
+    const plotShort = truncatePlot(plot, 300);
+    
     contentData.series[index] = {
       ...contentData.series[index],
       name: name,
       title: name,
       cover: poster || contentData.series[index].cover,
-      plot: plot || '',
+      plot: plotShort,
       cast: cast || '',
       director: director || '',
       genre: genre || '',
-      releaseDate: year ? `${year}-01-01` : contentData.series[index].releaseDate,
-      rating: ratingValue.toString(),
-      rating_5based: ratingValue / 2,
+      releaseDate: year ? \`\${year}-01-01\` : contentData.series[index].releaseDate,
+      rating: ratingValue.toFixed(1),
+      rating_5based: parseFloat((ratingValue / 2).toFixed(1)),
       backdrop_path: [poster || contentData.series[index].backdrop_path[0]]
     };
     
@@ -1332,7 +1428,7 @@ app.post('/api/series/:id/seasons', async (req, res) => {
     
     const season = {
       season_number: season_number,
-      name: `Temporada ${season_number}`,
+      name: \`Temporada \${season_number}\`,
       episode_count: 0,
       cover: series.cover,
       cover_big: series.cover,
@@ -1374,7 +1470,10 @@ app.post('/api/series/:id/seasons/:season/episodes', async (req, res) => {
     }
     
     const episodeNum = series.episodes[seasonNum].length + 1;
-    const episodeId = `${series.series_id}${String(seasonNum).padStart(2, '0')}${String(episodeNum).padStart(2, '0')}`;
+    const episodeId = \`\${series.series_id}\${String(seasonNum).padStart(2, '0')}\${String(episodeNum).padStart(2, '0')}\`;
+    
+    // Acortar sinopsis del episodio
+    const plotShort = truncatePlot(plot, 200);
     
     const episode = {
       id: episodeId,
@@ -1386,7 +1485,7 @@ app.post('/api/series/:id/seasons/:season/episodes', async (req, res) => {
         season: parseInt(seasonNum),
         episode_num: episodeNum,
         air_date: new Date().toISOString().split('T')[0],
-        plot: plot || '',
+        plot: plotShort,
         duration_secs: "2700",
         duration: "45:00",
         rating: series.rating || "8.0",
@@ -1492,18 +1591,18 @@ app.get('/player_api.php', authenticate, (req, res) => {
             director: movie.director || '',
             actors: movie.actors || movie.cast || '',
             cast: movie.cast || '',
-            description: movie.plot || '',
+            description: movie.plot || movie.description || '',
             plot: movie.plot || '',
             age: movie.age || '',
             rating: movie.rating || '7.0',
-            rating_5based: movie.rating_5based || parseFloat(movie.rating || '7.0') / 2,
+            rating_5based: movie.rating_5based || parseFloat((parseFloat(movie.rating || '7.0') / 2).toFixed(1)),
             country: movie.country || '',
             genre: movie.genre || '',
             duration: movie.duration || '7200',
             duration_secs: movie.duration_secs || 7200,
             video: movie.video || { codec: 'h264', bitrate: 2500 },
             audio: movie.audio || { codec: 'aac', bitrate: 128 },
-            backdrop_path: movie.backdrop_path || [movie.stream_icon]
+            backdrop_path: movie.backdrop_path && movie.backdrop_path.length > 0 ? movie.backdrop_path : [movie.stream_icon]
           },
           movie_data: {
             stream_id: movie.stream_id,
