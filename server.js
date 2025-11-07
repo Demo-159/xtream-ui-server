@@ -10,7 +10,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN || 'ghp_TXYhKUT1f8Hb02SwDCsN4aYSYQ
 const GITHUB_USER = 'Demo-159';
 const GITHUB_REPO = 'xtream-ui-server';
 const DATA_FILE = 'data.json';
-const OMDB_API_KEY = process.env.OMDB_KEY || 'ed52d6c5a797006699cdcc63ed1208d5';
+const OMDB_API_KEY = process.env.OMDB_KEY || '3e3e3e3e';
 
 // Datos iniciales
 let contentData = {
@@ -91,6 +91,24 @@ async function saveDataToGitHub() {
   }
 }
 
+// Traducir texto usando Google Translate API (gratis, sin key)
+async function translateToSpanish(text) {
+  if (!text || text === 'N/A') return text;
+  
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=es&dt=t&q=${encodeURIComponent(text)}`;
+    const response = await axios.get(url, { timeout: 5000 });
+    
+    if (response.data && response.data[0]) {
+      return response.data[0].map(item => item[0]).join('');
+    }
+  } catch (error) {
+    console.error('Error traduciendo:', error.message);
+  }
+  
+  return text;
+}
+
 // OMDb API Functions
 async function searchOMDb(query, type = 'movie') {
   try {
@@ -107,7 +125,17 @@ async function searchOMDb(query, type = 'movie') {
         const detailUrl = `http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.imdbID}&plot=full`;
         const detail = await axios.get(detailUrl, { timeout: 8000 });
         if (detail.data.Response === 'True') {
-          results.push(detail.data);
+          // Traducir sinopsis y género al español
+          const plotES = await translateToSpanish(detail.data.Plot);
+          const genreES = await translateToSpanish(detail.data.Genre);
+          
+          results.push({
+            ...detail.data,
+            Plot: plotES,
+            PlotOriginal: detail.data.Plot,
+            Genre: genreES,
+            GenreOriginal: detail.data.Genre
+          });
         }
       }
       return results;
@@ -1068,6 +1096,8 @@ app.post('/api/movie', async (req, res) => {
       ? Math.max(...contentData.movies.map(m => m.stream_id)) + 1 
       : 1;
     
+    const ratingValue = parseFloat(rating || '7.0');
+    
     const movie = {
       stream_id: newId,
       num: newId,
@@ -1075,8 +1105,8 @@ app.post('/api/movie', async (req, res) => {
       title: year ? `${name} (${year})` : name,
       stream_type: "movie",
       stream_icon: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
-      rating: rating || '7.0',
-      rating_5based: parseFloat(rating || '7.0') / 2,
+      rating: ratingValue.toString(),
+      rating_5based: ratingValue / 2,
       added: Math.floor(Date.now() / 1000).toString(),
       category_id: "1",
       container_extension: url.split('.').pop().split('?')[0] || "mp4",
@@ -1086,8 +1116,27 @@ app.post('/api/movie', async (req, res) => {
       plot: plot || '',
       director: director || '',
       cast: cast || '',
+      actors: cast || '',
       year: year || '',
-      tmdb_id: imdb || ''
+      releasedate: year ? `${year}-01-01` : '',
+      youtube_trailer: '',
+      tmdb_id: imdb || '',
+      o_name: name,
+      cover_big: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
+      movie_image: poster || 'https://via.placeholder.com/300x450?text=Sin+Poster',
+      backdrop_path: [poster || ''],
+      age: '',
+      country: '',
+      duration: '7200',
+      duration_secs: 7200,
+      video: {
+        codec: 'h264',
+        bitrate: 2500
+      },
+      audio: {
+        codec: 'aac',
+        bitrate: 128
+      }
     };
     
     contentData.movies.push(movie);
@@ -1117,20 +1166,27 @@ app.put('/api/movie', async (req, res) => {
       return res.status(404).json({ error: 'Movie not found' });
     }
     
+    const ratingValue = parseFloat(rating || '7.0');
+    
     contentData.movies[index] = {
       ...contentData.movies[index],
       name: year ? `${name} (${year})` : name,
       title: year ? `${name} (${year})` : name,
+      o_name: name,
       stream_icon: poster || contentData.movies[index].stream_icon,
-      rating: rating || '7.0',
-      rating_5based: parseFloat(rating || '7.0') / 2,
+      cover_big: poster || contentData.movies[index].cover_big,
+      movie_image: poster || contentData.movies[index].movie_image,
+      rating: ratingValue.toString(),
+      rating_5based: ratingValue / 2,
       container_extension: url.split('.').pop().split('?')[0] || "mp4",
       direct_source: url,
       genre: genre || '',
       plot: plot || '',
       director: director || '',
       cast: cast || '',
+      actors: cast || '',
       year: year || '',
+      releasedate: year ? `${year}-01-01` : contentData.movies[index].releasedate,
       tmdb_id: imdb || ''
     };
     
@@ -1159,6 +1215,8 @@ app.post('/api/series', async (req, res) => {
       ? Math.max(...contentData.series.map(s => s.series_id)) + 1 
       : 1;
     
+    const ratingValue = parseFloat(rating || '8.0');
+    
     const series = {
       series_id: newId,
       name: name,
@@ -1170,8 +1228,8 @@ app.post('/api/series', async (req, res) => {
       genre: genre || '',
       releaseDate: year ? `${year}-01-01` : new Date().toISOString().split('T')[0],
       last_modified: Math.floor(Date.now() / 1000).toString(),
-      rating: rating || '8.0',
-      rating_5based: parseFloat(rating || '8.0') / 2,
+      rating: ratingValue.toString(),
+      rating_5based: ratingValue / 2,
       backdrop_path: [poster || 'https://via.placeholder.com/1280x720?text=Sin+Backdrop'],
       youtube_trailer: "",
       episode_run_time: "45",
@@ -1209,6 +1267,8 @@ app.put('/api/series', async (req, res) => {
       return res.status(404).json({ error: 'Series not found' });
     }
     
+    const ratingValue = parseFloat(rating || '8.0');
+    
     contentData.series[index] = {
       ...contentData.series[index],
       name: name,
@@ -1219,8 +1279,8 @@ app.put('/api/series', async (req, res) => {
       director: director || '',
       genre: genre || '',
       releaseDate: year ? `${year}-01-01` : contentData.series[index].releaseDate,
-      rating: rating || '8.0',
-      rating_5based: parseFloat(rating || '8.0') / 2,
+      rating: ratingValue.toString(),
+      rating_5based: ratingValue / 2,
       backdrop_path: [poster || contentData.series[index].backdrop_path[0]]
     };
     
@@ -1419,7 +1479,42 @@ app.get('/player_api.php', authenticate, (req, res) => {
       const vodId = req.query.vod_id;
       const movie = contentData.movies.find(m => m.stream_id == vodId);
       if (movie) {
-        res.json({ info: movie, movie_data: movie });
+        res.json({ 
+          info: {
+            ...movie,
+            tmdb_id: movie.tmdb_id || movie.imdb_id || '',
+            name: movie.name,
+            o_name: movie.o_name || movie.name,
+            cover_big: movie.cover_big || movie.stream_icon,
+            movie_image: movie.movie_image || movie.stream_icon,
+            releasedate: movie.releasedate || movie.year ? `${movie.year}-01-01` : '',
+            youtube_trailer: movie.youtube_trailer || '',
+            director: movie.director || '',
+            actors: movie.actors || movie.cast || '',
+            cast: movie.cast || '',
+            description: movie.plot || '',
+            plot: movie.plot || '',
+            age: movie.age || '',
+            rating: movie.rating || '7.0',
+            rating_5based: movie.rating_5based || parseFloat(movie.rating || '7.0') / 2,
+            country: movie.country || '',
+            genre: movie.genre || '',
+            duration: movie.duration || '7200',
+            duration_secs: movie.duration_secs || 7200,
+            video: movie.video || { codec: 'h264', bitrate: 2500 },
+            audio: movie.audio || { codec: 'aac', bitrate: 128 },
+            backdrop_path: movie.backdrop_path || [movie.stream_icon]
+          },
+          movie_data: {
+            stream_id: movie.stream_id,
+            name: movie.name,
+            added: movie.added,
+            category_id: movie.category_id,
+            container_extension: movie.container_extension,
+            custom_sid: movie.custom_sid || '',
+            direct_source: movie.direct_source
+          }
+        });
       } else {
         res.json({ error: "VOD not found" });
       }
