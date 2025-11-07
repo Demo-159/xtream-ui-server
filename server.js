@@ -9,115 +9,113 @@ const PASSWORD = 'password123';
 const GITHUB_TOKEN = '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';
 const GITHUB_USER = 'Demo-159';
 const GITHUB_REPO = 'xtream-ui-server';
-const OMDB_API_KEY = 'trilogy'; // API Key gratuita de OMDb
+const DATA_FILE = 'data.json';
 
-// Base de datos en memoria (se carga desde GitHub)
-let movies = [];
-let series = [];
-let seriesEpisodes = {};
+// APIs gratuitas para metadatos
+const OMDB_API_KEY = '3e3e3e3e'; // Usa tu propia key de http://www.omdbapi.com/
+const TMDB_API_KEY = ''; // Opcional: https://www.themoviedb.org/settings/api
+
+let contentData = {
+  movies: [],
+  series: [],
+  categories: [{ category_id: "1", category_name: "Películas", parent_id: 0 }],
+  seriesCategories: [{ category_id: "1", category_name: "Series", parent_id: 0 }]
+};
 
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
 
-// ============ FUNCIONES GITHUB ============
-async function getGitHubFile(path) {
+// ==================== GITHUB FUNCTIONS ====================
+async function loadDataFromGitHub() {
   try {
-    const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${path}`;
+    const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${DATA_FILE}`;
     const response = await axios.get(url, {
       headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
     });
+    
     const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
-    return { content: JSON.parse(content), sha: response.data.sha };
-  } catch (error) {
-    if (error.response?.status === 404) {
-      return { content: null, sha: null };
-    }
-    throw error;
-  }
-}
-
-async function updateGitHubFile(path, content, sha) {
-  const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${path}`;
-  const encodedContent = Buffer.from(JSON.stringify(content, null, 2)).toString('base64');
-  
-  await axios.put(url, {
-    message: `Update ${path}`,
-    content: encodedContent,
-    sha: sha
-  }, {
-    headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
-  });
-}
-
-async function loadData() {
-  try {
-    const moviesData = await getGitHubFile('data/movies.json');
-    const seriesData = await getGitHubFile('data/series.json');
-    const episodesData = await getGitHubFile('data/episodes.json');
-    
-    movies = moviesData.content || [];
-    series = seriesData.content || [];
-    seriesEpisodes = episodesData.content || {};
-    
+    contentData = JSON.parse(content);
     console.log('✅ Datos cargados desde GitHub');
   } catch (error) {
-    console.log('⚠️ Error cargando datos, usando arrays vacíos:', error.message);
+    if (error.response?.status === 404) {
+      console.log('📝 Creando archivo de datos inicial en GitHub...');
+      await saveDataToGitHub();
+    } else {
+      console.log('⚠️ Usando datos por defecto');
+    }
   }
 }
 
-async function saveData() {
+async function saveDataToGitHub() {
   try {
-    const moviesData = await getGitHubFile('data/movies.json');
-    const seriesData = await getGitHubFile('data/series.json');
-    const episodesData = await getGitHubFile('data/episodes.json');
+    const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${DATA_FILE}`;
+    let sha = null;
     
-    await updateGitHubFile('data/movies.json', movies, moviesData.sha);
-    await updateGitHubFile('data/series.json', series, seriesData.sha);
-    await updateGitHubFile('data/episodes.json', seriesEpisodes, episodesData.sha);
+    try {
+      const existing = await axios.get(url, {
+        headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+      });
+      sha = existing.data.sha;
+    } catch (e) {}
+    
+    const content = Buffer.from(JSON.stringify(contentData, null, 2)).toString('base64');
+    
+    await axios.put(url, {
+      message: `Update content data - ${new Date().toISOString()}`,
+      content: content,
+      sha: sha
+    }, {
+      headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+    });
     
     console.log('✅ Datos guardados en GitHub');
+    return true;
   } catch (error) {
-    console.error('❌ Error guardando datos:', error.message);
-    throw error;
+    console.error('❌ Error guardando en GitHub:', error.message);
+    return false;
   }
 }
 
-// ============ API OMDB ============
-async function searchOMDB(title) {
+// ==================== METADATA APIs ====================
+async function searchOMDb(query, type = 'movie', year = null) {
   try {
-    const response = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&s=${encodeURIComponent(title)}`);
-    return response.data.Search || [];
+    const searchUrl = `http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&s=${encodeURIComponent(query)}&type=${type}`;
+    const searchRes = await axios.get(searchUrl);
+    
+    if (searchRes.data.Response === 'True' && searchRes.data.Search?.length > 0) {
+      const results = [];
+      for (let item of searchRes.data.Search.slice(0, 5)) {
+        const detailUrl = `http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${item.imdbID}&plot=full`;
+        const detail = await axios.get(detailUrl);
+        if (detail.data.Response === 'True') {
+          results.push(detail.data);
+        }
+      }
+      return results;
+    }
   } catch (error) {
-    console.error('Error buscando en OMDb:', error.message);
-    return [];
+    console.error('Error OMDB:', error.message);
   }
+  return [];
 }
 
-async function getOMDBDetails(imdbId) {
+async function getOMDbById(imdbId) {
   try {
-    const response = await axios.get(`http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${imdbId}&plot=full`);
-    return response.data;
+    const url = `http://www.omdbapi.com/?apikey=${OMDB_API_KEY}&i=${imdbId}&plot=full`;
+    const response = await axios.get(url);
+    if (response.data.Response === 'True') {
+      return response.data;
+    }
   } catch (error) {
-    console.error('Error obteniendo detalles de OMDb:', error.message);
-    return null;
+    console.error('Error OMDB:', error.message);
   }
+  return null;
 }
 
-// ============ AUTENTICACIÓN ============
-function authenticate(req, res, next) {
-  const { username, password } = req.query;
-  if (username === USERNAME && password === PASSWORD) {
-    next();
-  } else {
-    res.status(401).json({ error: "Invalid credentials" });
-  }
-}
-
-// ============ PANEL DE ADMINISTRACIÓN ============
+// ==================== PANEL DE ADMINISTRACIÓN ====================
 app.get('/admin', (req, res) => {
-  res.send(`
-<!DOCTYPE html>
+  res.send(`<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -126,1132 +124,669 @@ app.get('/admin', (req, res) => {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
       padding: 20px;
     }
-    .container { max-width: 1400px; margin: 0 auto; }
-    .header {
+    .container { 
+      max-width: 1400px;
+      margin: 0 auto;
       background: white;
-      padding: 30px;
       border-radius: 15px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-      margin-bottom: 30px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
       text-align: center;
     }
-    .header h1 { color: #667eea; font-size: 2.5em; margin-bottom: 10px; }
-    .header p { color: #666; font-size: 1.1em; }
+    .header h1 { font-size: 2.5em; margin-bottom: 10px; }
     .tabs {
+      display: flex;
+      background: #f5f5f5;
+      border-bottom: 2px solid #ddd;
+    }
+    .tab {
+      flex: 1;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s;
+      border: none;
+      background: none;
+      font-size: 16px;
+    }
+    .tab:hover { background: #e0e0e0; }
+    .tab.active {
+      background: white;
+      border-bottom: 3px solid #667eea;
+      color: #667eea;
+    }
+    .content { padding: 30px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #333;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border 0.3s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    textarea { 
+      min-height: 100px;
+      resize: vertical;
+      font-family: inherit;
+    }
+    
+    .search-container {
       display: flex;
       gap: 10px;
       margin-bottom: 20px;
     }
-    .tab {
-      background: white;
-      border: none;
-      padding: 15px 30px;
-      border-radius: 10px;
-      font-size: 1.1em;
-      cursor: pointer;
-      transition: all 0.3s;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    .search-container input {
+      flex: 1;
     }
-    .tab:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.15); }
-    .tab.active { background: #667eea; color: white; }
-    .content {
-      background: white;
-      padding: 30px;
-      border-radius: 15px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-    .section { display: none; }
-    .section.active { display: block; }
-    .form-group {
-      margin-bottom: 20px;
-    }
-    .form-group label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: 600;
-      color: #333;
-    }
-    .form-group input, .form-group textarea, .form-group select {
-      width: 100%;
-      padding: 12px;
-      border: 2px solid #e0e0e0;
-      border-radius: 8px;
-      font-size: 1em;
-      transition: border 0.3s;
-    }
-    .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
-      outline: none;
-      border-color: #667eea;
-    }
-    .form-group textarea { min-height: 100px; resize: vertical; }
-    .btn {
-      background: #667eea;
+    
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border: none;
       padding: 12px 30px;
       border-radius: 8px;
-      font-size: 1.1em;
+      font-size: 16px;
+      font-weight: bold;
       cursor: pointer;
-      transition: all 0.3s;
-      margin-right: 10px;
+      transition: transform 0.2s, box-shadow 0.2s;
     }
-    .btn:hover { background: #5568d3; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
-    .btn-secondary { background: #6c757d; }
-    .btn-secondary:hover { background: #5a6268; }
-    .btn-danger { background: #dc3545; }
-    .btn-danger:hover { background: #c82333; }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    button.secondary {
+      background: #6c757d;
+    }
+    
     .search-results {
       margin-top: 20px;
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 15px;
     }
-    .search-item {
-      border: 2px solid #e0e0e0;
-      border-radius: 10px;
-      padding: 15px;
+    .search-result {
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
       cursor: pointer;
       transition: all 0.3s;
-      text-align: center;
+      background: white;
     }
-    .search-item:hover { border-color: #667eea; transform: scale(1.05); }
-    .search-item img { width: 100%; height: 250px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
-    .search-item h4 { font-size: 0.95em; margin-bottom: 5px; }
-    .search-item p { font-size: 0.85em; color: #666; }
-    .items-list {
+    .search-result:hover {
+      border-color: #667eea;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      transform: translateY(-3px);
+    }
+    .search-result img {
+      width: 100%;
+      height: 250px;
+      object-fit: cover;
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+    .search-result h4 {
+      font-size: 14px;
+      margin-bottom: 5px;
+      color: #333;
+    }
+    .search-result p {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .content-list {
       margin-top: 30px;
     }
-    .item {
-      background: #f8f9fa;
-      padding: 20px;
-      border-radius: 10px;
+    .content-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 15px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
       margin-bottom: 15px;
+      background: #f9f9f9;
+    }
+    .content-item img {
+      width: 80px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 5px;
+    }
+    .content-item-info {
+      flex: 1;
+    }
+    .content-item-info h3 {
+      margin-bottom: 5px;
+      color: #333;
+    }
+    .content-item-info p {
+      color: #666;
+      font-size: 14px;
+    }
+    .content-item-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .content-item-actions button {
+      padding: 8px 15px;
+      font-size: 14px;
+    }
+    
+    .season-manager {
+      margin-top: 20px;
+      border: 2px solid #667eea;
+      border-radius: 8px;
+      padding: 20px;
+      background: #f8f9ff;
+    }
+    .season-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      transition: all 0.3s;
+      margin-bottom: 15px;
     }
-    .item:hover { box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-    .item-info { flex: 1; }
-    .item-info h3 { color: #667eea; margin-bottom: 5px; }
-    .item-info p { color: #666; font-size: 0.9em; }
-    .item-actions { display: flex; gap: 10px; }
-    .loading {
-      display: none;
-      text-align: center;
-      padding: 20px;
-      color: #667eea;
-      font-size: 1.2em;
+    .episode-item {
+      background: white;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
     }
-    .loading.show { display: block; }
-    .episode-form {
-      background: #f0f0f0;
-      padding: 20px;
-      border-radius: 10px;
-      margin-top: 20px;
-    }
-    .season-selector {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-    .season-btn {
-      padding: 10px 20px;
-      background: #e0e0e0;
-      border: none;
+    
+    .alert {
+      padding: 15px;
       border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.3s;
+      margin-bottom: 20px;
+      font-weight: bold;
     }
-    .season-btn.active { background: #667eea; color: white; }
+    .alert-success {
+      background: #d4edda;
+      color: #155724;
+      border: 2px solid #c3e6cb;
+    }
+    .alert-error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 2px solid #f5c6cb;
+    }
+    
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+    
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .search-results { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <h1>🎬 Panel Xtream UI</h1>
-      <p>Gestión de Películas y Series con GitHub + OMDb</p>
+      <p>Administra tu contenido VOD y Series</p>
     </div>
-
+    
     <div class="tabs">
       <button class="tab active" onclick="showTab('movies')">🎬 Películas</button>
       <button class="tab" onclick="showTab('series')">📺 Series</button>
+      <button class="tab" onclick="showTab('list')">📋 Contenido Existente</button>
     </div>
-
+    
     <div class="content">
-      <!-- PELÍCULAS -->
-      <div id="movies" class="section active">
-        <h2>Gestión de Películas</h2>
+      <div id="alert-container"></div>
+      
+      <!-- TAB PELÍCULAS -->
+      <div id="movies" class="tab-content active">
+        <h2>Agregar Película</h2>
         
-        <div class="form-group">
-          <label>🔍 Buscar película (título o ID IMDb):</label>
-          <input type="text" id="movieSearch" placeholder="Ej: Shrek o tt0126029">
-          <button class="btn" onclick="searchMovie()">Buscar</button>
+        <div class="search-container">
+          <input type="text" id="movie-search" placeholder="Buscar por título o IMDb ID (ej: tt1234567)">
+          <button onclick="searchMovie()">🔍 Buscar</button>
         </div>
-
-        <div class="loading" id="movieLoading">Buscando...</div>
-        <div class="search-results" id="movieResults"></div>
-
-        <div id="movieForm" style="display: none;">
-          <h3>Información de la Película</h3>
-          <input type="hidden" id="movieEditId">
-          <div class="form-group">
-            <label>Título:</label>
-            <input type="text" id="movieTitle">
+        
+        <div id="movie-search-results" class="search-results"></div>
+        
+        <form id="movie-form">
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Título:</label>
+              <input type="text" id="movie-title" required>
+            </div>
+            <div class="form-group">
+              <label>Año:</label>
+              <input type="text" id="movie-year">
+            </div>
           </div>
-          <div class="form-group">
-            <label>Año:</label>
-            <input type="text" id="movieYear">
-          </div>
-          <div class="form-group">
-            <label>ID IMDb:</label>
-            <input type="text" id="movieImdb">
-          </div>
-          <div class="form-group">
-            <label>Póster (URL):</label>
-            <input type="text" id="moviePoster">
-          </div>
+          
           <div class="form-group">
             <label>Sinopsis:</label>
-            <textarea id="moviePlot"></textarea>
+            <textarea id="movie-plot"></textarea>
           </div>
+          
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Director:</label>
+              <input type="text" id="movie-director">
+            </div>
+            <div class="form-group">
+              <label>Reparto:</label>
+              <input type="text" id="movie-cast">
+            </div>
+          </div>
+          
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Género:</label>
+              <input type="text" id="movie-genre">
+            </div>
+            <div class="form-group">
+              <label>Calificación (0-10):</label>
+              <input type="number" id="movie-rating" step="0.1" min="0" max="10">
+            </div>
+          </div>
+          
+          <div class="grid-2">
+            <div class="form-group">
+              <label>URL Poster:</label>
+              <input type="url" id="movie-poster">
+            </div>
+            <div class="form-group">
+              <label>URL Video:</label>
+              <input type="url" id="movie-url" required>
+            </div>
+          </div>
+          
           <div class="form-group">
-            <label>Director:</label>
-            <input type="text" id="movieDirector">
+            <label>IMDb ID:</label>
+            <input type="text" id="movie-imdb" placeholder="tt1234567">
           </div>
-          <div class="form-group">
-            <label>Actores:</label>
-            <input type="text" id="movieActors">
-          </div>
-          <div class="form-group">
-            <label>Género:</label>
-            <input type="text" id="movieGenre">
-          </div>
-          <div class="form-group">
-            <label>Rating IMDb:</label>
-            <input type="text" id="movieRating">
-          </div>
-          <div class="form-group">
-            <label>Duración (minutos):</label>
-            <input type="number" id="movieDuration">
-          </div>
-          <div class="form-group">
-            <label>URL del video (Archive.org):</label>
-            <input type="text" id="movieSource" placeholder="https://archive.org/download/...">
-          </div>
-          <button class="btn" onclick="saveMovie()">💾 Guardar Película</button>
-          <button class="btn btn-secondary" onclick="cancelMovie()">❌ Cancelar</button>
-        </div>
-
-        <div class="items-list" id="moviesList"></div>
+          
+          <button type="submit">💾 Guardar Película</button>
+        </form>
       </div>
-
-      <!-- SERIES -->
-      <div id="series" class="section">
-        <h2>Gestión de Series</h2>
+      
+      <!-- TAB SERIES -->
+      <div id="series" class="tab-content">
+        <h2>Agregar Serie</h2>
         
-        <div class="form-group">
-          <label>🔍 Buscar serie (título o ID IMDb):</label>
-          <input type="text" id="seriesSearch" placeholder="Ej: Breaking Bad o tt0903747">
-          <button class="btn" onclick="searchSeries()">Buscar</button>
+        <div class="search-container">
+          <input type="text" id="series-search" placeholder="Buscar serie por título o IMDb ID">
+          <button onclick="searchSeries()">🔍 Buscar</button>
         </div>
-
-        <div class="loading" id="seriesLoading">Buscando...</div>
-        <div class="search-results" id="seriesResults"></div>
-
-        <div id="seriesForm" style="display: none;">
-          <h3>Información de la Serie</h3>
-          <input type="hidden" id="seriesEditId">
-          <div class="form-group">
-            <label>Título:</label>
-            <input type="text" id="seriesTitle">
+        
+        <div id="series-search-results" class="search-results"></div>
+        
+        <form id="series-form">
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Título:</label>
+              <input type="text" id="series-title" required>
+            </div>
+            <div class="form-group">
+              <label>Año:</label>
+              <input type="text" id="series-year">
+            </div>
           </div>
-          <div class="form-group">
-            <label>Año:</label>
-            <input type="text" id="seriesYear">
-          </div>
-          <div class="form-group">
-            <label>ID IMDb:</label>
-            <input type="text" id="seriesImdb">
-          </div>
-          <div class="form-group">
-            <label>Póster (URL):</label>
-            <input type="text" id="seriesPoster">
-          </div>
+          
           <div class="form-group">
             <label>Sinopsis:</label>
-            <textarea id="seriesPlot"></textarea>
+            <textarea id="series-plot"></textarea>
           </div>
+          
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Director/Creador:</label>
+              <input type="text" id="series-director">
+            </div>
+            <div class="form-group">
+              <label>Reparto:</label>
+              <input type="text" id="series-cast">
+            </div>
+          </div>
+          
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Género:</label>
+              <input type="text" id="series-genre">
+            </div>
+            <div class="form-group">
+              <label>Calificación (0-10):</label>
+              <input type="number" id="series-rating" step="0.1" min="0" max="10">
+            </div>
+          </div>
+          
           <div class="form-group">
-            <label>Director/Creador:</label>
-            <input type="text" id="seriesDirector">
+            <label>URL Poster:</label>
+            <input type="url" id="series-poster">
           </div>
-          <div class="form-group">
-            <label>Actores:</label>
-            <input type="text" id="seriesActors">
+          
+          <button type="submit">💾 Crear Serie</button>
+        </form>
+        
+        <div id="season-manager" style="display:none;" class="season-manager">
+          <div class="season-header">
+            <h3>Temporadas y Episodios</h3>
+            <button type="button" onclick="addSeason()">➕ Nueva Temporada</button>
           </div>
-          <div class="form-group">
-            <label>Género:</label>
-            <input type="text" id="seriesGenre">
-          </div>
-          <div class="form-group">
-            <label>Rating IMDb:</label>
-            <input type="text" id="seriesRating">
-          </div>
-          <button class="btn" onclick="saveSeries()">💾 Guardar Serie</button>
-          <button class="btn btn-secondary" onclick="cancelSeries()">❌ Cancelar</button>
+          <div id="seasons-container"></div>
         </div>
-
-        <div class="items-list" id="seriesList"></div>
-
-        <!-- Gestión de Episodios -->
-        <div id="episodesSection" style="display: none;">
-          <div class="episode-form">
-            <h3>📝 Gestión de Episodios - <span id="currentSeriesName"></span></h3>
-            <input type="hidden" id="episodeSeriesId">
-            
-            <div class="form-group">
-              <label>Temporada:</label>
-              <select id="episodeSeason" onchange="loadEpisodes()">
-                <option value="1">Temporada 1</option>
-                <option value="2">Temporada 2</option>
-                <option value="3">Temporada 3</option>
-                <option value="4">Temporada 4</option>
-                <option value="5">Temporada 5</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label>Número de Episodio:</label>
-              <input type="number" id="episodeNumber" min="1" value="1">
-            </div>
-
-            <div class="form-group">
-              <label>Título del Episodio:</label>
-              <input type="text" id="episodeTitle">
-            </div>
-
-            <div class="form-group">
-              <label>Sinopsis:</label>
-              <textarea id="episodePlot"></textarea>
-            </div>
-
-            <div class="form-group">
-              <label>Duración (minutos):</label>
-              <input type="number" id="episodeDuration" value="45">
-            </div>
-
-            <div class="form-group">
-              <label>URL del video (Archive.org):</label>
-              <input type="text" id="episodeSource" placeholder="https://archive.org/download/...">
-            </div>
-
-            <button class="btn" onclick="saveEpisode()">💾 Añadir Episodio</button>
-            <button class="btn btn-secondary" onclick="closeEpisodes()">❌ Cerrar</button>
-
-            <div id="episodesList" style="margin-top: 20px;"></div>
-          </div>
-        </div>
+      </div>
+      
+      <!-- TAB LISTA -->
+      <div id="list" class="tab-content">
+        <h2>Contenido Existente</h2>
+        
+        <h3 style="margin-top: 30px;">🎬 Películas</h3>
+        <div id="movies-list" class="content-list"></div>
+        
+        <h3 style="margin-top: 30px;">📺 Series</h3>
+        <div id="series-list" class="content-list"></div>
       </div>
     </div>
   </div>
 
   <script>
-    let moviesData = [];
-    let seriesData = [];
-    let episodesData = {};
-
-    // Cargar datos iniciales
-    async function loadInitialData() {
-      const response = await fetch('/api/data');
-      const data = await response.json();
-      moviesData = data.movies;
-      seriesData = data.series;
-      episodesData = data.episodes;
-      renderMovies();
-      renderSeries();
-    }
-
+    let currentSeriesId = null;
+    let editingMovie = null;
+    let editingSeries = null;
+    
     function showTab(tab) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       event.target.classList.add('active');
       document.getElementById(tab).classList.add('active');
+      
+      if (tab === 'list') {
+        loadContentList();
+      }
     }
-
-    // ===== PELÍCULAS =====
+    
+    function showAlert(message, type = 'success') {
+      const container = document.getElementById('alert-container');
+      container.innerHTML = \`<div class="alert alert-\${type}">\${message}</div>\`;
+      setTimeout(() => container.innerHTML = '', 5000);
+    }
+    
     async function searchMovie() {
-      const query = document.getElementById('movieSearch').value.trim();
-      if (!query) return alert('Ingresa un título o ID IMDb');
-
-      document.getElementById('movieLoading').classList.add('show');
-      document.getElementById('movieResults').innerHTML = '';
-
-      const response = await fetch(\`/api/search?type=movie&query=\${encodeURIComponent(query)}\`);
-      const results = await response.json();
-
-      document.getElementById('movieLoading').classList.remove('show');
-
-      if (results.length === 0) {
-        document.getElementById('movieResults').innerHTML = '<p>No se encontraron resultados</p>';
-        return;
-      }
-
-      document.getElementById('movieResults').innerHTML = results.map(movie => \`
-        <div class="search-item" onclick='selectMovie(\${JSON.stringify(movie).replace(/'/g, "&apos;")})'>
-          <img src="\${movie.Poster !== 'N/A' ? movie.Poster : 'https://via.placeholder.com/200x300?text=Sin+Poster'}" alt="\${movie.Title}">
-          <h4>\${movie.Title}</h4>
-          <p>\${movie.Year} • \${movie.Type}</p>
-        </div>
-      \`).join('');
-    }
-
-    async function selectMovie(movie) {
-      const response = await fetch(\`/api/details?imdbId=\${movie.imdbID}\`);
-      const details = await response.json();
-
-      document.getElementById('movieEditId').value = '';
-      document.getElementById('movieTitle').value = details.Title || '';
-      document.getElementById('movieYear').value = details.Year || '';
-      document.getElementById('movieImdb').value = details.imdbID || '';
-      document.getElementById('moviePoster').value = details.Poster !== 'N/A' ? details.Poster : '';
-      document.getElementById('moviePlot').value = details.Plot || '';
-      document.getElementById('movieDirector').value = details.Director || '';
-      document.getElementById('movieActors').value = details.Actors || '';
-      document.getElementById('movieGenre').value = details.Genre || '';
-      document.getElementById('movieRating').value = details.imdbRating || '';
-      document.getElementById('movieDuration').value = details.Runtime ? parseInt(details.Runtime) : '';
-      document.getElementById('movieSource').value = '';
-
-      document.getElementById('movieForm').style.display = 'block';
-      document.getElementById('movieResults').innerHTML = '';
-    }
-
-    async function saveMovie() {
-      const id = document.getElementById('movieEditId').value;
-      const movie = {
-        stream_id: id || Date.now(),
-        name: document.getElementById('movieTitle').value,
-        title: document.getElementById('movieTitle').value,
-        stream_type: 'movie',
-        stream_icon: document.getElementById('moviePoster').value,
-        rating: document.getElementById('movieRating').value,
-        rating_5based: parseFloat(document.getElementById('movieRating').value) / 2,
-        added: Math.floor(Date.now() / 1000).toString(),
-        category_id: '1',
-        container_extension: 'mp4',
-        direct_source: document.getElementById('movieSource').value,
-        year: document.getElementById('movieYear').value,
-        imdb_id: document.getElementById('movieImdb').value,
-        plot: document.getElementById('moviePlot').value,
-        director: document.getElementById('movieDirector').value,
-        actors: document.getElementById('movieActors').value,
-        genre: document.getElementById('movieGenre').value,
-        duration: parseInt(document.getElementById('movieDuration').value) * 60
-      };
-
-      const response = await fetch('/api/movies', {
-        method: id ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(movie)
-      });
-
-      if (response.ok) {
-        alert('✅ Película guardada correctamente');
-        cancelMovie();
-        loadInitialData();
-      } else {
-        alert('❌ Error al guardar la película');
+      const query = document.getElementById('movie-search').value.trim();
+      if (!query) return;
+      
+      try {
+        const res = await fetch(\`/api/search?query=\${encodeURIComponent(query)}&type=movie\`);
+        const data = await res.json();
+        
+        const resultsDiv = document.getElementById('movie-search-results');
+        resultsDiv.innerHTML = '';
+        
+        data.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'search-result';
+          div.innerHTML = \`
+            <img src="\${item.Poster !== 'N/A' ? item.Poster : 'https://via.placeholder.com/200x300?text=No+Poster'}" alt="\${item.Title}">
+            <h4>\${item.Title} (\${item.Year})</h4>
+            <p>\${item.Genre || 'N/A'}</p>
+            <p>⭐ \${item.imdbRating || 'N/A'}</p>
+          \`;
+          div.onclick = () => fillMovieForm(item);
+          resultsDiv.appendChild(div);
+        });
+      } catch (error) {
+        showAlert('Error al buscar película', 'error');
       }
     }
-
-    function cancelMovie() {
-      document.getElementById('movieForm').style.display = 'none';
-      document.getElementById('movieSearch').value = '';
-      document.getElementById('movieResults').innerHTML = '';
+    
+    function fillMovieForm(data) {
+      document.getElementById('movie-title').value = data.Title || '';
+      document.getElementById('movie-year').value = data.Year || '';
+      document.getElementById('movie-plot').value = data.Plot || '';
+      document.getElementById('movie-director').value = data.Director || '';
+      document.getElementById('movie-cast').value = data.Actors || '';
+      document.getElementById('movie-genre').value = data.Genre || '';
+      document.getElementById('movie-rating').value = data.imdbRating || '';
+      document.getElementById('movie-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
+      document.getElementById('movie-imdb').value = data.imdbID || '';
     }
-
-    function editMovie(id) {
-      const movie = moviesData.find(m => m.stream_id == id);
-      if (!movie) return;
-
-      document.getElementById('movieEditId').value = movie.stream_id;
-      document.getElementById('movieTitle').value = movie.name;
-      document.getElementById('movieYear').value = movie.year || '';
-      document.getElementById('movieImdb').value = movie.imdb_id || '';
-      document.getElementById('moviePoster').value = movie.stream_icon;
-      document.getElementById('moviePlot').value = movie.plot || '';
-      document.getElementById('movieDirector').value = movie.director || '';
-      document.getElementById('movieActors').value = movie.actors || '';
-      document.getElementById('movieGenre').value = movie.genre || '';
-      document.getElementById('movieRating').value = movie.rating;
-      document.getElementById('movieDuration').value = movie.duration ? movie.duration / 60 : '';
-      document.getElementById('movieSource').value = movie.direct_source;
-
-      document.getElementById('movieForm').style.display = 'block';
-    }
-
-    async function deleteMovie(id) {
-      if (!confirm('¿Seguro que quieres eliminar esta película?')) return;
-
-      const response = await fetch(\`/api/movies/\${id}\`, { method: 'DELETE' });
-      if (response.ok) {
-        alert('✅ Película eliminada');
-        loadInitialData();
-      }
-    }
-
-    function renderMovies() {
-      const html = moviesData.map(movie => \`
-        <div class="item">
-          <div class="item-info">
-            <h3>\${movie.name}</h3>
-            <p>⭐ \${movie.rating} | 📅 \${movie.year || 'N/A'}</p>
-          </div>
-          <div class="item-actions">
-            <button class="btn" onclick="editMovie(\${movie.stream_id})">✏️ Editar</button>
-            <button class="btn btn-danger" onclick="deleteMovie(\${movie.stream_id})">🗑️ Eliminar</button>
-          </div>
-        </div>
-      \`).join('');
-      document.getElementById('moviesList').innerHTML = html || '<p>No hay películas agregadas</p>';
-    }
-
-    // ===== SERIES =====
+    
     async function searchSeries() {
-      const query = document.getElementById('seriesSearch').value.trim();
-      if (!query) return alert('Ingresa un título o ID IMDb');
-
-      document.getElementById('seriesLoading').classList.add('show');
-      document.getElementById('seriesResults').innerHTML = '';
-
-      const response = await fetch(\`/api/search?type=series&query=\${encodeURIComponent(query)}\`);
-      const results = await response.json();
-
-      document.getElementById('seriesLoading').classList.remove('show');
-
-      if (results.length === 0) {
-        document.getElementById('seriesResults').innerHTML = '<p>No se encontraron resultados</p>';
-        return;
+      const query = document.getElementById('series-search').value.trim();
+      if (!query) return;
+      
+      try {
+        const res = await fetch(\`/api/search?query=\${encodeURIComponent(query)}&type=series\`);
+        const data = await res.json();
+        
+        const resultsDiv = document.getElementById('series-search-results');
+        resultsDiv.innerHTML = '';
+        
+        data.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'search-result';
+          div.innerHTML = \`
+            <img src="\${item.Poster !== 'N/A' ? item.Poster : 'https://via.placeholder.com/200x300?text=No+Poster'}" alt="\${item.Title}">
+            <h4>\${item.Title} (\${item.Year})</h4>
+            <p>\${item.Genre || 'N/A'}</p>
+            <p>⭐ \${item.imdbRating || 'N/A'}</p>
+          \`;
+          div.onclick = () => fillSeriesForm(item);
+          resultsDiv.appendChild(div);
+        });
+      } catch (error) {
+        showAlert('Error al buscar serie', 'error');
       }
-
-      document.getElementById('seriesResults').innerHTML = results.map(series => \`
-        <div class="search-item" onclick='selectSeries(\${JSON.stringify(series).replace(/'/g, "&apos;")})'>
-          <img src="\${series.Poster !== 'N/A' ? series.Poster : 'https://via.placeholder.com/200x300?text=Sin+Poster'}" alt="\${series.Title}">
-          <h4>\${series.Title}</h4>
-          <p>\${series.Year} • \${series.Type}</p>
-        </div>
-      \`).join('');
     }
-
-    async function selectSeries(series) {
-      const response = await fetch(\`/api/details?imdbId=\${series.imdbID}\`);
-      const details = await response.json();
-
-      document.getElementById('seriesEditId').value = '';
-      document.getElementById('seriesTitle').value = details.Title || '';
-      document.getElementById('seriesYear').value = details.Year || '';
-      document.getElementById('seriesImdb').value = details.imdbID || '';
-      document.getElementById('seriesPoster').value = details.Poster !== 'N/A' ? details.Poster : '';
-      document.getElementById('seriesPlot').value = details.Plot || '';
-      document.getElementById('seriesDirector').value = details.Director || '';
-      document.getElementById('seriesActors').value = details.Actors || '';
-      document.getElementById('seriesGenre').value = details.Genre || '';
-      document.getElementById('seriesRating').value = details.imdbRating || '';
-
-      document.getElementById('seriesForm').style.display = 'block';
-      document.getElementById('seriesResults').innerHTML = '';
+    
+    function fillSeriesForm(data) {
+      document.getElementById('series-title').value = data.Title || '';
+      document.getElementById('series-year').value = data.Year || '';
+      document.getElementById('series-plot').value = data.Plot || '';
+      document.getElementById('series-director').value = data.Director || '';
+      document.getElementById('series-cast').value = data.Actors || '';
+      document.getElementById('series-genre').value = data.Genre || '';
+      document.getElementById('series-rating').value = data.imdbRating || '';
+      document.getElementById('series-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
     }
-
-    async function saveSeries() {
-      const id = document.getElementById('seriesEditId').value;
-      const series = {
-        series_id: id || Date.now(),
-        name: document.getElementById('seriesTitle').value,
-        title: document.getElementById('seriesTitle').value,
-        cover: document.getElementById('seriesPoster').value,
-        plot: document.getElementById('seriesPlot').value,
-        cast: document.getElementById('seriesActors').value,
-        director: document.getElementById('seriesDirector').value,
-        genre: document.getElementById('seriesGenre').value,
-        releaseDate: document.getElementById('seriesYear').value,
-        rating: document.getElementById('seriesRating').value,
-        rating_5based: parseFloat(document.getElementById('seriesRating').value) / 2,
-        last_modified: Math.floor(Date.now() / 1000).toString(),
-        category_id: '1',
-        category_ids: [1],
-        imdb_id: document.getElementById('seriesImdb').value,
-        backdrop_path: [document.getElementById('seriesPoster').value],
-        episode_run_time: '45'
+    
+    document.getElementById('movie-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const movieData = {
+        name: document.getElementById('movie-title').value,
+        year: document.getElementById('movie-year').value,
+        plot: document.getElementById('movie-plot').value,
+        director: document.getElementById('movie-director').value,
+        cast: document.getElementById('movie-cast').value,
+        genre: document.getElementById('movie-genre').value,
+        rating: document.getElementById('movie-rating').value,
+        poster: document.getElementById('movie-poster').value,
+        url: document.getElementById('movie-url').value,
+        imdb: document.getElementById('movie-imdb').value
       };
-
-      const response = await fetch('/api/series', {
-        method: id ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(series)
-      });
-
-      if (response.ok) {
-        alert('✅ Serie guardada correctamente');
-        cancelSeries();
-        loadInitialData();
-      } else {
-        alert('❌ Error al guardar la serie');
-      }
-    }
-
-    function cancelSeries() {
-      document.getElementById('seriesForm').style.display = 'none';
-      document.getElementById('seriesSearch').value = '';
-      document.getElementById('seriesResults').innerHTML = '';
-    }
-
-    function editSeries(id) {
-      const series = seriesData.find(s => s.series_id == id);
-      if (!series) return;
-
-      document.getElementById('seriesEditId').value = series.series_id;
-      document.getElementById('seriesTitle').value = series.name;
-      document.getElementById('seriesYear').value = series.releaseDate || '';
-      document.getElementById('seriesImdb').value = series.imdb_id || '';
-      document.getElementById('seriesPoster').value = series.cover;
-      document.getElementById('seriesPlot').value = series.plot || '';
-      document.getElementById('seriesDirector').value = series.director || '';
-      document.getElementById('seriesActors').value = series.cast || '';
-      document.getElementById('seriesGenre').value = series.genre || '';
-      document.getElementById('seriesRating').value = series.rating;
-
-      document.getElementById('seriesForm').style.display = 'block';
-    }
-
-    async function deleteSeries(id) {
-      if (!confirm('¿Seguro que quieres eliminar esta serie y todos sus episodios?')) return;
-
-      const response = await fetch(\`/api/series/\${id}\`, { method: 'DELETE' });
-      if (response.ok) {
-        alert('✅ Serie eliminada');
-        loadInitialData();
-      }
-    }
-
-    function manageEpisodes(id) {
-      const series = seriesData.find(s => s.series_id == id);
-      if (!series) return;
-
-      document.getElementById('episodeSeriesId').value = id;
-      document.getElementById('currentSeriesName').textContent = series.name;
-      document.getElementById('episodesSection').style.display = 'block';
-      loadEpisodes();
       
-      window.scrollTo({ top: document.getElementById('episodesSection').offsetTop, behavior: 'smooth' });
-    }
-
-    function closeEpisodes() {
-      document.getElementById('episodesSection').style.display = 'none';
-    }
-
-    async function loadEpisodes() {
-      const seriesId = document.getElementById('episodeSeriesId').value;
-      const season = document.getElementById('episodeSeason').value;
-
-      const episodes = episodesData[seriesId]?.episodes?.[season] || [];
-      
-      const html = episodes.map((ep, idx) => \`
-        <div class="item">
-          <div class="item-info">
-            <h4>E\${ep.episode_num} - \${ep.title}</h4>
-            <p>\${ep.info.plot || 'Sin sinopsis'}</p>
-          </div>
-          <div class="item-actions">
-            <button class="btn btn-danger" onclick="deleteEpisode(\${seriesId}, \${season}, \${idx})">🗑️</button>
-          </div>
-        </div>
-      \`).join('');
-
-      document.getElementById('episodesList').innerHTML = html || '<p>No hay episodios en esta temporada</p>';
-    }
-
-    async function saveEpisode() {
-      const seriesId = document.getElementById('episodeSeriesId').value;
-      const season = parseInt(document.getElementById('episodeSeason').value);
-      const episodeNum = parseInt(document.getElementById('episodeNumber').value);
-      const title = document.getElementById('episodeTitle').value;
-      const plot = document.getElementById('episodePlot').value;
-      const duration = parseInt(document.getElementById('episodeDuration').value);
-      const source = document.getElementById('episodeSource').value;
-
-      if (!title || !source) {
-        return alert('⚠️ Completa todos los campos obligatorios');
-      }
-
-      const episode = {
-        id: \`\${seriesId}_\${season}_\${episodeNum}\`,
-        episode_num: episodeNum,
-        title: title,
-        container_extension: 'mp4',
-        info: {
-          name: title,
-          season: season,
-          episode_num: episodeNum,
-          air_date: new Date().toISOString().split('T')[0],
-          plot: plot,
-          duration_secs: (duration * 60).toString(),
-          duration: \`\${duration}:00\`,
-          rating: '8.0',
-          cover_big: 'https://via.placeholder.com/500x300?text=Episode+Cover'
-        },
-        direct_source: source
-      };
-
-      const response = await fetch(\`/api/episodes/\${seriesId}/\${season}\`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(episode)
-      });
-
-      if (response.ok) {
-        alert('✅ Episodio añadido correctamente');
-        document.getElementById('episodeTitle').value = '';
-        document.getElementById('episodePlot').value = '';
-        document.getElementById('episodeSource').value = '';
-        document.getElementById('episodeNumber').value = parseInt(episodeNum) + 1;
-        await loadInitialData();
-        loadEpisodes();
-      } else {
-        alert('❌ Error al guardar el episodio');
-      }
-    }
-
-    async function deleteEpisode(seriesId, season, index) {
-      if (!confirm('¿Eliminar este episodio?')) return;
-
-      const response = await fetch(\`/api/episodes/\${seriesId}/\${season}/\${index}\`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        alert('✅ Episodio eliminado');
-        await loadInitialData();
-        loadEpisodes();
-      }
-    }
-
-    function renderSeries() {
-      const html = seriesData.map(series => \`
-        <div class="item">
-          <div class="item-info">
-            <h3>\${series.name}</h3>
-            <p>⭐ \${series.rating} | 📅 \${series.releaseDate || 'N/A'}</p>
-          </div>
-          <div class="item-actions">
-            <button class="btn" onclick="manageEpisodes(\${series.series_id})">📝 Episodios</button>
-            <button class="btn" onclick="editSeries(\${series.series_id})">✏️ Editar</button>
-            <button class="btn btn-danger" onclick="deleteSeries(\${series.series_id})">🗑️ Eliminar</button>
-          </div>
-        </div>
-      \`).join('');
-      document.getElementById('seriesList').innerHTML = html || '<p>No hay series agregadas</p>';
-    }
-
-    loadInitialData();
-  </script>
-</body>
-</html>
-  `);
-});
-
-// ============ API ENDPOINTS ============
-
-// Obtener todos los datos
-app.get('/api/data', (req, res) => {
-  res.json({
-    movies: movies,
-    series: series,
-    episodes: seriesEpisodes
-  });
-});
-
-// Buscar en OMDb
-app.get('/api/search', async (req, res) => {
-  const { type, query } = req.query;
-  const results = await searchOMDB(query);
-  const filtered = type === 'movie' 
-    ? results.filter(r => r.Type === 'movie')
-    : results.filter(r => r.Type === 'series');
-  res.json(filtered);
-});
-
-// Obtener detalles de OMDb
-app.get('/api/details', async (req, res) => {
-  const { imdbId } = req.query;
-  const details = await getOMDBDetails(imdbId);
-  res.json(details);
-});
-
-// CRUD Películas
-app.post('/api/movies', async (req, res) => {
-  const movie = req.body;
-  movies.push(movie);
-  await saveData();
-  res.json({ success: true });
-});
-
-app.put('/api/movies', async (req, res) => {
-  const movie = req.body;
-  const index = movies.findIndex(m => m.stream_id == movie.stream_id);
-  if (index !== -1) {
-    movies[index] = movie;
-    await saveData();
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Movie not found' });
-  }
-});
-
-app.delete('/api/movies/:id', async (req, res) => {
-  const id = req.params.id;
-  movies = movies.filter(m => m.stream_id != id);
-  await saveData();
-  res.json({ success: true });
-});
-
-// CRUD Series
-app.post('/api/series', async (req, res) => {
-  const serie = req.body;
-  series.push(serie);
-  
-  // Inicializar estructura de episodios
-  if (!seriesEpisodes[serie.series_id]) {
-    seriesEpisodes[serie.series_id] = {
-      seasons: [],
-      episodes: {}
-    };
-  }
-  
-  await saveData();
-  res.json({ success: true });
-});
-
-app.put('/api/series', async (req, res) => {
-  const serie = req.body;
-  const index = series.findIndex(s => s.series_id == serie.series_id);
-  if (index !== -1) {
-    series[index] = serie;
-    await saveData();
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Series not found' });
-  }
-});
-
-app.delete('/api/series/:id', async (req, res) => {
-  const id = req.params.id;
-  series = series.filter(s => s.series_id != id);
-  delete seriesEpisodes[id];
-  await saveData();
-  res.json({ success: true });
-});
-
-// CRUD Episodios
-app.post('/api/episodes/:seriesId/:season', async (req, res) => {
-  const { seriesId, season } = req.params;
-  const episode = req.body;
-  
-  if (!seriesEpisodes[seriesId]) {
-    seriesEpisodes[seriesId] = { seasons: [], episodes: {} };
-  }
-  
-  if (!seriesEpisodes[seriesId].episodes[season]) {
-    seriesEpisodes[seriesId].episodes[season] = [];
-    
-    // Añadir info de temporada si no existe
-    const seasonExists = seriesEpisodes[seriesId].seasons.find(s => s.season_number == season);
-    if (!seasonExists) {
-      seriesEpisodes[seriesId].seasons.push({
-        season_number: parseInt(season),
-        name: `Temporada ${season}`,
-        episode_count: 0,
-        cover: 'https://via.placeholder.com/500x300?text=Season+Cover',
-        cover_big: 'https://via.placeholder.com/1920x1080?text=Season+Cover',
-        air_date: new Date().toISOString().split('T')[0]
-      });
-    }
-  }
-  
-  seriesEpisodes[seriesId].episodes[season].push(episode);
-  
-  // Actualizar episode_count
-  const seasonIndex = seriesEpisodes[seriesId].seasons.findIndex(s => s.season_number == season);
-  if (seasonIndex !== -1) {
-    seriesEpisodes[seriesId].seasons[seasonIndex].episode_count = 
-      seriesEpisodes[seriesId].episodes[season].length;
-  }
-  
-  await saveData();
-  res.json({ success: true });
-});
-
-app.delete('/api/episodes/:seriesId/:season/:index', async (req, res) => {
-  const { seriesId, season, index } = req.params;
-  
-  if (seriesEpisodes[seriesId]?.episodes[season]) {
-    seriesEpisodes[seriesId].episodes[season].splice(parseInt(index), 1);
-    
-    // Actualizar episode_count
-    const seasonIndex = seriesEpisodes[seriesId].seasons.findIndex(s => s.season_number == season);
-    if (seasonIndex !== -1) {
-      seriesEpisodes[seriesId].seasons[seasonIndex].episode_count = 
-        seriesEpisodes[seriesId].episodes[season].length;
-    }
-    
-    await saveData();
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Episode not found' });
-  }
-});
-
-// ============ XTREAM API ENDPOINTS ============
-
-// Endpoint M3U para TiviMate
-app.get('/get.php', (req, res) => {
-  const { username, password, type } = req.query;
-  
-  if (username !== USERNAME || password !== PASSWORD) {
-    return res.status(401).send('#EXTM3U\n#EXTINF:-1,Error: Invalid credentials\nhttp://invalid');
-  }
-  
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
-  let m3uContent = '#EXTM3U x-tvg-url=""\n\n';
-  
-  if (!type || type === 'series') {
-    series.forEach(serie => {
-      const serieData = seriesEpisodes[serie.series_id];
-      if (serieData && serieData.episodes) {
-        Object.keys(serieData.episodes).forEach(seasonNum => {
-          const episodes = serieData.episodes[seasonNum];
-          episodes.forEach(episode => {
-            const episodeName = `${serie.name} S${String(seasonNum).padStart(2, '0')}E${String(episode.episode_num).padStart(2, '0')} ${episode.title}`;
-            m3uContent += `#EXTINF:-1 tvg-id="serie_${serie.series_id}_${seasonNum}_${episode.episode_num}" tvg-name="${episodeName}" tvg-logo="${serie.cover}" tvg-type="series" group-title="📺 ${serie.name}",${episodeName}\n`;
-            m3uContent += `${baseUrl}/series/${username}/${password}/${episode.id}.${episode.container_extension}\n\n`;
-          });
+      try {
+        const res = await fetch('/api/movie', {
+          method: editingMovie ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editingMovie ? {...movieData, id: editingMovie} : movieData)
         });
-      }
-    });
-  }
-  
-  if (!type || type === 'movie') {
-    movies.forEach(movie => {
-      m3uContent += `#EXTINF:-1 tvg-id="${movie.stream_id}" tvg-name="${movie.name}" tvg-logo="${movie.stream_icon}" tvg-type="movie" group-title="🎬 Películas",${movie.name}\n`;
-      m3uContent += `${baseUrl}/movie/${username}/${password}/${movie.stream_id}.${movie.container_extension}\n\n`;
-    });
-  }
-  
-  res.setHeader('Content-Type', 'audio/x-mpegurl; charset=utf-8');
-  res.setHeader('Content-Disposition', 'inline; filename="playlist.m3u"');
-  res.send(m3uContent);
-});
-
-// Endpoint de autenticación Xtream Codes
-app.get('/player_api.php', authenticate, (req, res) => {
-  const action = req.query.action;
-
-  switch (action) {
-    case 'get_vod_streams':
-      res.json(movies);
-      break;
-    
-    case 'get_vod_categories':
-      res.json([{ category_id: "1", category_name: "Películas", parent_id: 0 }]);
-      break;
-    
-    case 'get_vod_info':
-      const vodId = req.query.vod_id;
-      const movie = movies.find(m => m.stream_id == vodId);
-      if (movie) {
-        res.json({
-          info: movie,
-          movie_data: movie
-        });
-      } else {
-        res.json({ error: "VOD not found" });
-      }
-      break;
-    
-    case 'get_series':
-      res.json(series);
-      break;
-    
-    case 'get_series_categories':
-      res.json([{ category_id: "1", category_name: "Series", parent_id: 0 }]);
-      break;
-    
-    case 'get_series_info':
-      const seriesId = req.query.series_id;
-      const serieInfo = series.find(s => s.series_id == seriesId);
-      const serieEpisodes = seriesEpisodes[seriesId];
-      
-      if (serieInfo && serieEpisodes) {
-        res.json({
-          seasons: serieEpisodes.seasons,
-          info: serieInfo,
-          episodes: serieEpisodes.episodes
-        });
-      } else {
-        res.json({ error: "Series not found" });
-      }
-      break;
-    
-    case 'get_live_streams':
-      res.json([]);
-      break;
-    
-    case 'get_live_categories':
-      res.json([]);
-      break;
-    
-    default:
-      res.json({
-        user_info: {
-          username: USERNAME,
-          password: PASSWORD,
-          message: "API activa",
-          auth: 1,
-          status: "Active",
-          exp_date: "2099999999",
-          is_trial: "0",
-          active_cons: "0",
-          created_at: Math.floor(Date.now() / 1000).toString(),
-          max_connections: "5",
-          allowed_output_formats: ["m3u8", "ts", "rtmp"]
-        },
-        server_info: {
-          url: req.protocol + '://' + req.get('host'),
-          port: port.toString(),
-          https_port: "",
-          server_protocol: req.protocol,
-          rtmp_port: "",
-          timezone: "UTC",
-          timestamp_now: Math.floor(Date.now() / 1000),
-          time_now: new Date().toISOString()
+        
+        if (res.ok) {
+          showAlert(editingMovie ? 'Película actualizada' : 'Película agregada correctamente');
+          document.getElementById('movie-form').reset();
+          document.getElementById('movie-search-results').innerHTML = '';
+          editingMovie = null;
+        } else {
+          showAlert('Error al guardar película', 'error');
         }
-      });
-  }
-});
-
-// Endpoint para streaming de películas
-app.get('/movie/:username/:password/:streamId.:ext', (req, res) => {
-  const { username, password, streamId } = req.params;
-  
-  if (username !== USERNAME || password !== PASSWORD) {
-    return res.status(401).send('Unauthorized');
-  }
-  
-  const movie = movies.find(m => m.stream_id == streamId);
-  if (movie && movie.direct_source) {
-    res.redirect(movie.direct_source);
-  } else {
-    res.status(404).send('Movie not found');
-  }
-});
-
-// Endpoint para streaming de series
-app.get('/series/:username/:password/:episodeId.:ext', (req, res) => {
-  const { username, password, episodeId } = req.params;
-  
-  if (username !== USERNAME || password !== PASSWORD) {
-    return res.status(401).send('Unauthorized');
-  }
-  
-  let foundEpisode = null;
-  
-  for (const seriesId in seriesEpisodes) {
-    const serieData = seriesEpisodes[seriesId];
-    for (const seasonNum in serieData.episodes) {
-      const episode = serieData.episodes[seasonNum].find(ep => ep.id === episodeId);
-      if (episode) {
-        foundEpisode = episode;
-        break;
+      } catch (error) {
+        showAlert('Error de conexión', 'error');
+      }
+    });
+    
+    document.getElementById('series-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const seriesData = {
+        name: document.getElementById('series-title').value,
+        year: document.getElementById('series-year').value,
+        plot: document.getElementById('series-plot').value,
+        director: document.getElementById('series-director').value,
+        cast: document.getElementById('series-cast').value,
+        genre: document.getElementById('series-genre').value,
+        rating: document.getElementById('series-rating').value,
+        poster: document.getElementById('series-poster').value
+      };
+      
+      try {
+        const res = await fetch('/api/series', {
+          method: editingSeries ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editingSeries ? {...seriesData, id: editingSeries} : seriesData)
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          showAlert(editingSeries ? 'Serie actualizada' : 'Serie creada correctamente');
+          currentSeriesId = data.series_id;
+          document.getElementById('season-manager').style.display = 'block';
+          loadSeasons(currentSeriesId);
+          editingSeries = null;
+        } else {
+          showAlert('Error al guardar serie', 'error');
+        }
+      } catch (error) {
+        showAlert('Error de conexión', 'error');
+      }
+    });
+    
+    async function loadSeasons(seriesId) {
+      try {
+        const res = await fetch(\`/api/series/\${seriesId}/seasons\`);
+        const data = await res.json();
+        
+        const container = document.getElementById('seasons-container');
+        container.innerHTML = '';
+        
+        data.seasons.forEach(season => {
+          const seasonDiv = document.createElement('div');
+          seasonDiv.innerHTML = \`
+            <h4>Temporada \${season.season_number}</h4>
+            <button onclick="addEpisode(\${seriesId}, \${season.season_number})">➕ Agregar Episodio</button>
+            <div id="episodes-\${season.season_number}"></div>
+          \`;
+          container.appendChild(seasonDiv);
+          
+          loadEpisodes(seriesId, season.season_number);
+        });
+      } catch (error) {
+        console.error('Error cargando temporadas:', error);
       }
     }
-    if (foundEpisode) break;
-  }
-  
-  if (foundEpisode && foundEpisode.direct_source) {
-    res.redirect(foundEpisode.direct_source);
-  } else {
-    res.status(404).send('Episode not found');
-  }
-});
-
-// Ruta de inicio
-app.get('/', (req, res) => {
-  res.send(`
-    <html>
-      <head>
-        <title>Xtream API Server</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-          }
-          .container {
-            text-align: center;
-            background: rgba(255,255,255,0.1);
-            padding: 50px;
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
-          }
-          h1 { font-size: 3em; margin-bottom: 20px; }
-          a {
-            display: inline-block;
-            margin-top: 30px;
-            padding: 15px 40px;
-            background: white;
-            color: #667eea;
-            text-decoration: none;
-            border-radius: 10px;
-            font-weight: bold;
-            font-size: 1.2em;
-            transition: transform 0.3s;
-          }
-          a:hover { transform: scale(1.05); }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>🎬 Xtream API Server</h1>
-          <p>Servidor funcionando correctamente</p>
-          <a href="/admin">Ir al Panel de Administración</a>
-        </div>
-      </body>
-    </html>
-  `);
-});
-
-// Iniciar servidor y cargar datos
-app.listen(port, async () => {
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('🚀 Xtream API Server - INICIADO');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`📡 Puerto: ${port}`);
-  console.log(`🌐 URL: http://localhost:${port}`);
-  console.log(`👤 Usuario: ${USERNAME}`);
-  console.log(`🔑 Contraseña: ${PASSWORD}`);
-  console.log(`⚙️  Panel: http://localhost:${port}/admin`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  
-  await loadData();
-});
+    
+    async function loadEpisodes(seriesId, seasonNum) {
+      try {
+        const res = await fetch(\`/api/series/\${seriesId}/seasons/\${seasonNum}/episodes\`);
+        const episodes = await res.json();
+        
+        const container = document.getElementById(\`episodes-\${seasonNum}\`);
+        container.innerHTML = '';
+        
+        episodes.forEach(ep => {
+          const epDiv = document.createElement('div');
+          epDiv.className = 'episode-item';
+          epDiv.innerHTML = \`
+            <strong>E\${ep.episode_num}: \${ep.title}</strong>
+            <p>\${ep.info.plot || 'Sin sinopsis'}</p>
+            <small>URL: \${ep.direct_source}</small>
+          \`;
+          container.appendChild(epDiv);
+        });
+      } catch (error) {
+        console.error('Error cargando episodios:', error);
+      }
+    }
+    
+    async function addSeason() {
+      const seasonNum = prompt('Número de temporada:');
+      if (!seasonNum || !currentSeriesId) return;
+      
+      try {
+        await fetch(\`/api/series/\${currentSeriesId}/seasons\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ season_number: parseInt(seasonNum) })
+        });
+        loadSeasons(currentSeriesId);
+        showAlert('Temporada agregada');
+      } catch (error) {
+        showAlert('Error al agregar temporada', 'error');
+      }
+    }
+    
+    async function addEpisode(seriesId, seasonNum) {
+      const title = prompt('Título del episodio:');
+      const url = prompt('URL del video:');
+      if (!title || !url) return;
+      
+      try {
+        await fetch(\`/api/series/\${seriesId}/seasons/\${seasonNum}/episodes\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, url, plot: '' })
+        });
+        loadEpisodes(seriesId, seasonNum);
+        showAlert('Episodio agregado');
+      } catch (error) {
+        showAlert('Error al agregar episodio', 'error');
+      }
+    }
+    
+    async function loadContentList() {
+      try {
+        const res = await fetch('/api/content');
+        const data = await res.json();
+        
+        // Películas
+        const moviesList = document.getElementById('movies-list');
+        moviesList.innerHTML = '';
+        data.movies.forEach(movie => {
+          const div = document.createElement('div');
+          div.className = 'content-item';
+          div.innerHTML = \`
+            <img src="\${movie.stream_icon || 'https://via.placeholder.com/80x120?text=No+Poster'}" alt="\${movie.name}">
+            <div class="content-item-info">
+              <h3>\${movie.name}</h3>
+              <p>⭐ \${movie.rating || 'N/A'} | 🎬 \${movie.genre
