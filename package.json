@@ -1,7 +1,7 @@
 {
   "name": "xtream-ui-server",
   "version": "2.0.0",
-  "description": "Servidor Xtream UI con panel de administración y autocompletado OMDb",
+  "description": "Servidor Xtream UI completo con panel de administración y sincronización con GitHub",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,10 +11,10 @@
     "xtream",
     "iptv",
     "vod",
-    "tivimate",
-    "streaming"
+    "series",
+    "tivimate"
   ],
-  "author": "",
+  "author": "Demo-159",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
