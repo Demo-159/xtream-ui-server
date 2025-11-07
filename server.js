@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 // Configuración - Cambia estos valores
-const GITHUB_TOKEN = 'TU_TOKEN_AQUI';
+const GITHUB_TOKEN = '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';
 const GITHUB_USER = 'Demo-159';
 const GITHUB_REPO = 'xtream-ui-server';
 
