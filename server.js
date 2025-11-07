@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 // ============= CONFIGURACIÓN =============
 const USERNAME = process.env.XTREAM_USER || 'usuario';
 const PASSWORD = process.env.XTREAM_PASS || 'password123';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin123';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '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';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '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';
 const GITHUB_USER = 'Demo-159';
 const GITHUB_REPO = 'xtream-ui-server';
