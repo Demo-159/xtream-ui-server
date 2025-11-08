@@ -1576,7 +1576,8 @@ function authenticate(req, res, next) {
 }
 
 app.get('/get.php', (req, res) => {
-  const { username, password, type } = req.query;
+  const { username, password } = req.query;
+  // TiviMate envía parámetros adicionales como type y output que ignoramos
   
   if (username !== USERNAME || password !== PASSWORD) {
     return res.status(401).send('#EXTM3U\n#EXTINF:-1,Error: Invalid credentials\nhttp://invalid');
@@ -1585,27 +1586,25 @@ app.get('/get.php', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   let m3uContent = '#EXTM3U x-tvg-url=""\n\n';
   
-  if (!type || type === 'series') {
-    contentData.series.forEach(serie => {
-      if (serie.episodes) {
-        Object.keys(serie.episodes).forEach(seasonNum => {
-          const episodes = serie.episodes[seasonNum];
-          episodes.forEach(episode => {
-            const episodeName = `${serie.name} S${String(seasonNum).padStart(2, '0')}E${String(episode.episode_num).padStart(2, '0')} ${episode.title}`;
-            m3uContent += `#EXTINF:-1 tvg-id="serie_${serie.series_id}_${seasonNum}_${episode.episode_num}" tvg-name="${episodeName}" tvg-logo="${serie.cover}" group-title="📺 ${serie.name}",${episodeName}\n`;
-            m3uContent += `${baseUrl}/series/${username}/${password}/${episode.id}.${episode.container_extension}\n\n`;
-          });
+  // Siempre incluir series
+  contentData.series.forEach(serie => {
+    if (serie.episodes) {
+      Object.keys(serie.episodes).forEach(seasonNum => {
+        const episodes = serie.episodes[seasonNum];
+        episodes.forEach(episode => {
+          const episodeName = `${serie.name} S${String(seasonNum).padStart(2, '0')}E${String(episode.episode_num).padStart(2, '0')} ${episode.title}`;
+          m3uContent += `#EXTINF:-1 tvg-id="serie_${serie.series_id}_${seasonNum}_${episode.episode_num}" tvg-name="${episodeName}" tvg-logo="${serie.cover}" group-title="📺 ${serie.name}",${episodeName}\n`;
+          m3uContent += `${baseUrl}/series/${username}/${password}/${episode.id}.${episode.container_extension}\n\n`;
         });
-      }
-    });
-  }
+      });
+    }
+  });
   
-  if (!type || type === 'movie') {
-    contentData.movies.forEach(movie => {
-      m3uContent += `#EXTINF:-1 tvg-id="${movie.stream_id}" tvg-name="${movie.name}" tvg-logo="${movie.stream_icon}" group-title="🎬 Películas",${movie.name}\n`;
-      m3uContent += `${baseUrl}/movie/${username}/${password}/${movie.stream_id}.${movie.container_extension}\n\n`;
-    });
-  }
+  // Siempre incluir películas
+  contentData.movies.forEach(movie => {
+    m3uContent += `#EXTINF:-1 tvg-id="${movie.stream_id}" tvg-name="${movie.name}" tvg-logo="${movie.stream_icon}" group-title="🎬 Películas",${movie.name}\n`;
+    m3uContent += `${baseUrl}/movie/${username}/${password}/${movie.stream_id}.${movie.container_extension}\n\n`;
+  });
   
   res.setHeader('Content-Type', 'audio/x-mpegurl; charset=utf-8');
   res.setHeader('Content-Disposition', 'inline; filename="playlist.m3u"');
