@@ -133,8 +133,19 @@
       ],
       "num": 2,
       "stream_type": "series",
-      "seasons": [],
-      "episodes": {}
+      "seasons": [
+        {
+          "season_number": 1,
+          "name": "Temporada 1",
+          "episode_count": 0,
+          "cover": "https://m.media-amazon.com/images/M/MV5BNmRkZmIxMmYtMjY5Ny00MzA3LWI1MmYtZDg3MjBhZDFlZTY5XkEyXkFqcGc@._V1_SX300.jpg",
+          "cover_big": "https://m.media-amazon.com/images/M/MV5BNmRkZmIxMmYtMjY5Ny00MzA3LWI1MmYtZDg3MjBhZDFlZTY5XkEyXkFqcGc@._V1_SX300.jpg",
+          "air_date": "2025-11-08"
+        }
+      ],
+      "episodes": {
+        "1": []
+      }
     }
   ],
   "categories": {
