@@ -58,6 +58,14 @@
           "episode_count": 2,
           "cover": "https://i.imgur.com/tVdzIkh.jpeg",
           "air_date": "2025-01-01"
+        },
+        {
+          "season_number": 2,
+          "name": "Temporada 2",
+          "episode_count": 0,
+          "cover": "https://i.imgur.com/tVdzIkh.jpeg",
+          "cover_big": "https://i.imgur.com/tVdzIkh.jpeg",
+          "air_date": "2025-11-08"
         }
       ],
       "episodes": {
@@ -97,7 +105,8 @@
             },
             "direct_source": "https://archive.org/download/ejemplo/pluribus_s01e02.mp4"
           }
-        ]
+        ],
+        "2": []
       }
     }
   ],
