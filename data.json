@@ -165,6 +165,33 @@
           }
         ]
       }
+    },
+    {
+      "series_id": 3,
+      "name": "El Chavo del Ocho",
+      "title": "El Chavo del Ocho",
+      "cover": "https://m.media-amazon.com/images/M/MV5BNmRkZmIxMmYtMjY5Ny00MzA3LWI1MmYtZDg3MjBhZDFlZTY5XkEyXkFqcGc@._V1_SX300.jpg",
+      "plot": "Las desventuras de un niño pobre, sin hogar y torpe y sus amigos en su humilde barrio.",
+      "cast": "Ramón Valdés, Roberto Gómez Bolaños, Carlos Villagrán",
+      "director": "N/A",
+      "genre": "Comedia, Familia",
+      "releaseDate": "1972-01-01",
+      "last_modified": "1762617498",
+      "rating": "8.7",
+      "rating_5based": 4.35,
+      "backdrop_path": [
+        "https://m.media-amazon.com/images/M/MV5BNmRkZmIxMmYtMjY5Ny00MzA3LWI1MmYtZDg3MjBhZDFlZTY5XkEyXkFqcGc@._V1_SX300.jpg"
+      ],
+      "youtube_trailer": "",
+      "episode_run_time": "45",
+      "category_id": "1",
+      "category_ids": [
+        1
+      ],
+      "num": 3,
+      "stream_type": "series",
+      "seasons": [],
+      "episodes": {}
     }
   ],
   "categories": {
