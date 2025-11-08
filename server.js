@@ -1124,7 +1124,6 @@ app.delete('/api/movie/:id', async (req, res) => {
   }
 });
 
-// ✅ CORRECCIÓN CRÍTICA: Incluir stream_type en saveSeries
 app.post('/api/series', async (req, res) => {
   try {
     const { name, year, plot, director, cast, genre, rating, poster } = req.body;
@@ -1152,9 +1151,7 @@ app.post('/api/series', async (req, res) => {
       youtube_trailer: "",
       episode_run_time: "45",
       category_id: "1",
-      category_ids: [1], // ✅ Array de números
       num: newId,
-      stream_type: "series", // ✅ CRÍTICO: Campo obligatorio
       seasons: [],
       episodes: {}
     };
@@ -1177,7 +1174,6 @@ app.get('/api/series/:id', (req, res) => {
   }
 });
 
-// ✅ CORRECCIÓN: Mantener stream_type al actualizar
 app.put('/api/series', async (req, res) => {
   try {
     const { id, name, year, plot, director, cast, genre, rating, poster } = req.body;
@@ -1201,8 +1197,7 @@ app.put('/api/series', async (req, res) => {
       releaseDate: year ? `${year}-01-01` : contentData.series[index].releaseDate,
       rating: ratingValue.toString(),
       rating_5based: ratingValue / 2,
-      backdrop_path: [poster || contentData.series[index].backdrop_path[0]],
-      stream_type: "series" // ✅ Mantener el campo
+      backdrop_path: [poster || contentData.series[index].backdrop_path[0]]
     };
     
     await saveDataToGitHub();
@@ -1423,7 +1418,6 @@ function authenticate(req, res, next) {
   }
 }
 
-// ✅ CORRECCIÓN: M3U con tvg-type="series" para TiviMate
 app.get('/get.php', (req, res) => {
   const { username, password } = req.query;
   
@@ -1434,15 +1428,15 @@ app.get('/get.php', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   let m3uContent = '#EXTM3U x-tvg-url=""\n\n';
   
-  // Series
+  // Series - IMPORTANTE: Primero las series antes que las películas
   contentData.series.forEach(serie => {
     if (serie.episodes) {
       Object.keys(serie.episodes).forEach(seasonNum => {
         const episodes = serie.episodes[seasonNum];
         episodes.forEach(episode => {
           const episodeName = `${serie.name} S${String(seasonNum).padStart(2, '0')}E${String(episode.episode_num).padStart(2, '0')} ${episode.title}`;
-          // ✅ CRÍTICO: tvg-type="series" para que TiviMate lo reconozca como serie
-          m3uContent += `#EXTINF:-1 tvg-id="serie_${serie.series_id}_${seasonNum}_${episode.episode_num}" tvg-name="${episodeName}" tvg-logo="${serie.cover}" tvg-type="series" group-title="📺 ${serie.name}",${episodeName}\n`;
+          // Incluir series_id en tvg-id para mejor identificación
+          m3uContent += `#EXTINF:-1 tvg-id="series_${serie.series_id}_s${seasonNum}e${episode.episode_num}" tvg-name="${episodeName}" tvg-logo="${serie.cover}" group-title="📺 SERIES - ${serie.name}",${episodeName}\n`;
           m3uContent += `${baseUrl}/series/${username}/${password}/${episode.id}.${episode.container_extension}\n\n`;
         });
       });
@@ -1460,7 +1454,7 @@ app.get('/get.php', (req, res) => {
   res.send(m3uContent);
 });
 
-// ✅ ENDPOINT PRINCIPAL CORREGIDO - CRÍTICO PARA TIVIMATE
+// ENDPOINT PRINCIPAL CORREGIDO PARA TIVIMATE
 app.get('/player_api.php', authenticate, (req, res) => {
   const action = req.query.action;
 
@@ -1518,9 +1512,8 @@ app.get('/player_api.php', authenticate, (req, res) => {
       }
       break;
     
-    // ✅ CORRECCIÓN CRÍTICA: Este es el cambio más importante
     case 'get_series':
-      // FORMATO CORRECTO: Cada serie DEBE tener stream_type: "series"
+      // CRÍTICO: Formato correcto para TiviMate - DEBE ser un array directo sin stream_type
       const seriesFormatted = contentData.series.map(s => ({
         series_id: s.series_id,
         name: s.name,
@@ -1533,14 +1526,13 @@ app.get('/player_api.php', authenticate, (req, res) => {
         releaseDate: s.releaseDate,
         last_modified: s.last_modified,
         rating: s.rating || '8.0',
-        rating_5based: s.rating_5based || parseFloat(s.rating || '8.0') / 2,
+        rating_5based: parseFloat(s.rating || '8.0') / 2,
         backdrop_path: s.backdrop_path || [s.cover],
         youtube_trailer: s.youtube_trailer || '',
         episode_run_time: s.episode_run_time || '45',
         category_id: s.category_id || '1',
-        category_ids: [parseInt(s.category_id || '1')], // ✅ Array de números
-        num: s.series_id,
-        stream_type: "series" // ✅ CRÍTICO: Sin esto TiviMate las trata como películas
+        category_ids: [parseInt(s.category_id || '1')],
+        num: s.series_id
       }));
       res.json(seriesFormatted);
       break;
@@ -1558,7 +1550,6 @@ app.get('/player_api.php', authenticate, (req, res) => {
           seasons: serie.seasons || [],
           info: {
             ...serie,
-            stream_type: "series", // ✅ También aquí
             tmdb_id: serie.tmdb_id || '',
             backdrop_path: serie.backdrop_path || [serie.cover]
           },
@@ -1586,7 +1577,7 @@ app.get('/player_api.php', authenticate, (req, res) => {
           message: "API activa",
           auth: 1,
           status: "Active",
-          exp_date: EXPIRATION_TIMESTAMP.toString(), // ✅ TiviMate necesita esto
+          exp_date: EXPIRATION_TIMESTAMP.toString(),
           is_trial: "0",
           active_cons: "0",
           created_at: Math.floor(Date.now() / 1000).toString(),
