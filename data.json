@@ -137,14 +137,33 @@
         {
           "season_number": 1,
           "name": "Temporada 1",
-          "episode_count": 0,
+          "episode_count": 1,
           "cover": "https://m.media-amazon.com/images/M/MV5BNmRkZmIxMmYtMjY5Ny00MzA3LWI1MmYtZDg3MjBhZDFlZTY5XkEyXkFqcGc@._V1_SX300.jpg",
           "cover_big": "https://m.media-amazon.com/images/M/MV5BNmRkZmIxMmYtMjY5Ny00MzA3LWI1MmYtZDg3MjBhZDFlZTY5XkEyXkFqcGc@._V1_SX300.jpg",
           "air_date": "2025-11-08"
         }
       ],
       "episodes": {
-        "1": []
+        "1": [
+          {
+            "id": "20101",
+            "episode_num": 1,
+            "title": "ropavejero",
+            "container_extension": "com/s2/9WEbgLrmwl1W2yev10Ya",
+            "info": {
+              "name": "ropavejero",
+              "season": 1,
+              "episode_num": 1,
+              "air_date": "2025-11-08",
+              "plot": "hhj",
+              "duration_secs": "2700",
+              "duration": "45:00",
+              "rating": "8.7",
+              "cover_big": "https://m.media-amazon.com/images/M/MV5BNmRkZmIxMmYtMjY5Ny00MzA3LWI1MmYtZDg3MjBhZDFlZTY5XkEyXkFqcGc@._V1_SX300.jpg"
+            },
+            "direct_source": "https://drive.newsophon.com/s2/9WEbgLrmwl1W2yev10Ya"
+          }
+        ]
       }
     }
   ],
