@@ -165,6 +165,33 @@
           }
         ]
       }
+    },
+    {
+      "series_id": 3,
+      "name": "Heidi",
+      "title": "Heidi",
+      "cover": "https://m.media-amazon.com/images/M/MV5BM2EyMzEwOGMtNTc3OC00NDgxLWIwNDEtM2JkOTNjZDBhNDVkXkEyXkFqcGc@._V1_SX300.jpg",
+      "plot": "Una niña llamada Heidi vive con su abuelo en algún lugar de los Alpes.",
+      "cast": "Vic Perrin, Randi Kiger, Kazuko Sugiyama",
+      "director": "N/A",
+      "genre": "Animación, Aventura, Comedia",
+      "releaseDate": "1974-01-01",
+      "last_modified": "1762628268",
+      "rating": "7.5",
+      "rating_5based": 3.75,
+      "backdrop_path": [
+        "https://m.media-amazon.com/images/M/MV5BM2EyMzEwOGMtNTc3OC00NDgxLWIwNDEtM2JkOTNjZDBhNDVkXkEyXkFqcGc@._V1_SX300.jpg"
+      ],
+      "youtube_trailer": "",
+      "episode_run_time": "45",
+      "category_id": "1",
+      "category_ids": [
+        1
+      ],
+      "num": 3,
+      "stream_type": "series",
+      "seasons": [],
+      "episodes": {}
     }
   ],
   "categories": {
