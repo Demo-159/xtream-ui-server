@@ -194,14 +194,33 @@
         {
           "season_number": 1,
           "name": "Temporada 1",
-          "episode_count": 0,
+          "episode_count": 1,
           "cover": "https://m.media-amazon.com/images/M/MV5BM2EyMzEwOGMtNTc3OC00NDgxLWIwNDEtM2JkOTNjZDBhNDVkXkEyXkFqcGc@._V1_SX300.jpg",
           "cover_big": "https://m.media-amazon.com/images/M/MV5BM2EyMzEwOGMtNTc3OC00NDgxLWIwNDEtM2JkOTNjZDBhNDVkXkEyXkFqcGc@._V1_SX300.jpg",
           "air_date": "2025-11-08"
         }
       ],
       "episodes": {
-        "1": []
+        "1": [
+          {
+            "id": "30101",
+            "episode_num": 1,
+            "title": "gggh",
+            "container_extension": "com/",
+            "info": {
+              "name": "gggh",
+              "season": 1,
+              "episode_num": 1,
+              "air_date": "2025-11-08",
+              "plot": "hhhj",
+              "duration_secs": "2700",
+              "duration": "45:00",
+              "rating": "7.5",
+              "cover_big": "https://m.media-amazon.com/images/M/MV5BM2EyMzEwOGMtNTc3OC00NDgxLWIwNDEtM2JkOTNjZDBhNDVkXkEyXkFqcGc@._V1_SX300.jpg"
+            },
+            "direct_source": "https://xtream-ui-server.onrender.com/"
+          }
+        ]
       }
     }
   ],
