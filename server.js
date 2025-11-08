@@ -12,7 +12,7 @@ const GITHUB_REPO = 'xtream-ui-server';
 const DATA_FILE = 'data.json';
 const OMDB_API_KEY = process.env.OMDB_KEY || '3e3e3e3e';
 
-// Fecha de expiración
+// Fecha de expiración (puedes cambiarla)
 const EXPIRATION_TIMESTAMP = Math.floor(new Date('2099-12-31').getTime() / 1000);
 
 // Datos iniciales
@@ -94,7 +94,7 @@ async function saveDataToGitHub() {
   }
 }
 
-// Traducir texto
+// Traducir texto usando Google Translate API (gratis, sin key)
 async function translateToSpanish(text) {
   if (!text || text === 'N/A') return text;
   
@@ -148,7 +148,7 @@ async function searchOMDb(query, type = 'movie') {
   return [];
 }
 
-// [PANEL DE ADMINISTRACIÓN - Mantener el código HTML existente]
+// Panel de Administración
 app.get('/admin', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="es">
@@ -627,156 +627,6 @@ app.get('/admin', (req, res) => {
         
         showAlert(\`\${data.length} resultados encontrados\`, 'success');
       } catch (error) {
-        showAlert('Error al buscar. Verifica tu conexión.', 'error');
-      }
-    }
-    
-    function fillMovieForm(data) {
-      document.getElementById('movie-title').value = data.Title || '';
-      document.getElementById('movie-year').value = data.Year || '';
-      document.getElementById('movie-plot').value = data.Plot || '';
-      document.getElementById('movie-director').value = data.Director || '';
-      document.getElementById('movie-cast').value = data.Actors || '';
-      document.getElementById('movie-genre').value = data.Genre || '';
-      document.getElementById('movie-rating').value = data.imdbRating || '7.0';
-      document.getElementById('movie-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
-      document.getElementById('movie-imdb').value = data.imdbID || '';
-      
-      showAlert('Formulario rellenado. Añade la URL del video y guarda.', 'success');
-      document.getElementById('movie-url').focus();
-    }
-    
-    async function searchSeries() {
-      const query = document.getElementById('series-search').value.trim();
-      if (!query) {
-        showAlert('Escribe un título o ID de IMDb', 'error');
-        return;
-      }
-      
-      showAlert('Buscando...', 'success');
-      
-      try {
-        const res = await fetch(\`/api/search?query=\${encodeURIComponent(query)}&type=series\`);
-        const data = await res.json();
-        
-        const resultsDiv = document.getElementById('series-search-results');
-        resultsDiv.innerHTML = '';
-        
-        if (data.length === 0) {
-          resultsDiv.innerHTML = '<p style="padding: 20px; text-align: center; color: #666;">No se encontraron resultados. Verifica la API Key de OMDb.</p>';
-          return;
-        }
-        
-        data.forEach(item => {
-          const div = document.createElement('div');
-          div.className = 'search-result';
-          div.innerHTML = \`
-            <img src="\${item.Poster !== 'N/A' ? item.Poster : 'https://via.placeholder.com/200x300?text=Sin+Poster'}" alt="\${item.Title}">
-            <h4>\${item.Title}</h4>
-            <p>📅 \${item.Year}</p>
-            <p>🎭 \${item.Genre || 'N/A'}</p>
-            <p>⭐ \${item.imdbRating || 'N/A'}</p>
-          \`;
-          div.onclick = () => fillSeriesForm(item);
-          resultsDiv.appendChild(div);
-        });
-        
-        showAlert(\`\${data.length} resultados encontrados\`, 'success');
-      } catch (error) {
-        showAlert('Error al buscar. Verifica tu conexión.', 'error');
-      }
-    }
-    
-    function fillSeriesForm(data) {
-      document.getElementById('series-title').value = data.Title || '';
-      document.getElementById('series-year').value = data.Year?.split('–')[0] || '';
-      document.getElementById('series-plot').value = data.Plot || '';
-      document.getElementById('series-director').value = data.Director || '';
-      document.getElementById('series-cast').value = data.Actors || '';
-      document.getElementById('series-genre').value = data.Genre || '';
-      document.getElementById('series-rating').value = data.imdbRating || '8.0';
-      document.getElementById('series-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
-      
-      showAlert('Formulario rellenado. Guarda la serie.', 'success');
-    }
-    
-    async function saveMovie(e) {
-      e.preventDefault();
-      
-      const editId = document.getElementById('movie-edit-id').value;
-      const movieData = {
-        name: document.getElementById('movie-title').value,
-        year: document.getElementById('movie-year').value,
-        plot: document.getElementById('movie-plot').value,
-        director: document.getElementById('movie-director').value,
-        cast: document.getElementById('movie-cast').value,
-        genre: document.getElementById('movie-genre').value,
-        rating: document.getElementById('movie-rating').value,
-        poster: document.getElementById('movie-poster').value,
-        url: document.getElementById('movie-url').value,
-        imdb: document.getElementById('movie-imdb').value
-      };
-      
-      if (editId) {
-        movieData.id = editId;
-      }
-      
-      try {
-        const res = await fetch('/api/movie', {
-          method: editId ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(movieData)
-        });
-        
-        if (res.ok) {
-          showAlert(editId ? '✅ Película actualizada y guardada en GitHub' : '✅ Película agregada y guardada en GitHub', 'success');
-          resetMovieForm();
-          document.getElementById('movie-search-results').innerHTML = '';
-        } else {
-          const error = await res.json();
-          showAlert('❌ Error: ' + (error.error || 'Error desconocido'), 'error');
-        }
-      } catch (error) {
-        showAlert('❌ Error de conexión', 'error');
-      }
-    }
-    
-    async function saveSeries(e) {
-      e.preventDefault();
-      
-      const editId = document.getElementById('series-edit-id').value;
-      const seriesData = {
-        name: document.getElementById('series-title').value,
-        year: document.getElementById('series-year').value,
-        plot: document.getElementById('series-plot').value,
-        director: document.getElementById('series-director').value,
-        cast: document.getElementById('series-cast').value,
-        genre: document.getElementById('series-genre').value,
-        rating: document.getElementById('series-rating').value,
-        poster: document.getElementById('series-poster').value
-      };
-      
-      if (editId) {
-        seriesData.id = editId;
-      }
-      
-      try {
-        const res = await fetch('/api/series', {
-          method: editId ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(seriesData)
-        });
-        
-        const data = await res.json();
-        if (res.ok) {
-          showAlert(editId ? '✅ Serie actualizada' : '✅ Serie creada. Ahora añade temporadas y episodios.', 'success');
-          currentSeriesId = data.series_id || editId;
-          document.getElementById('season-manager').style.display = 'block';
-          loadSeasons(currentSeriesId);
-        } else {
-          showAlert('❌ Error: ' + (data.error || 'Error desconocido'), 'error');
-        }
-      } catch (error) {
         showAlert('❌ Error de conexión', 'error');
       }
     }
@@ -1144,7 +994,7 @@ app.get('/admin', (req, res) => {
 </html>`);
 });
 
-// API Endpoints (mantener código de search, movie POST/PUT/DELETE)
+// API Endpoints
 app.get('/api/search', async (req, res) => {
   const { query, type = 'movie' } = req.query;
   try {
@@ -1196,8 +1046,14 @@ app.post('/api/movie', async (req, res) => {
       country: '',
       duration: '7200',
       duration_secs: 7200,
-      video: { codec: 'h264', bitrate: 2500 },
-      audio: { codec: 'aac', bitrate: 128 }
+      video: {
+        codec: 'h264',
+        bitrate: 2500
+      },
+      audio: {
+        codec: 'aac',
+        bitrate: 128
+      }
     };
     
     contentData.movies.push(movie);
@@ -1268,7 +1124,7 @@ app.delete('/api/movie/:id', async (req, res) => {
   }
 });
 
-// Series API (mantener el código de series POST/PUT/DELETE/seasons/episodes)
+// ✅ CORRECCIÓN CRÍTICA: Incluir stream_type en saveSeries
 app.post('/api/series', async (req, res) => {
   try {
     const { name, year, plot, director, cast, genre, rating, poster } = req.body;
@@ -1296,9 +1152,9 @@ app.post('/api/series', async (req, res) => {
       youtube_trailer: "",
       episode_run_time: "45",
       category_id: "1",
-      category_ids: [1],
+      category_ids: [1], // ✅ Array de números
       num: newId,
-      stream_type: "series",
+      stream_type: "series", // ✅ CRÍTICO: Campo obligatorio
       seasons: [],
       episodes: {}
     };
@@ -1321,6 +1177,7 @@ app.get('/api/series/:id', (req, res) => {
   }
 });
 
+// ✅ CORRECCIÓN: Mantener stream_type al actualizar
 app.put('/api/series', async (req, res) => {
   try {
     const { id, name, year, plot, director, cast, genre, rating, poster } = req.body;
@@ -1345,7 +1202,7 @@ app.put('/api/series', async (req, res) => {
       rating: ratingValue.toString(),
       rating_5based: ratingValue / 2,
       backdrop_path: [poster || contentData.series[index].backdrop_path[0]],
-      stream_type: "series"
+      stream_type: "series" // ✅ Mantener el campo
     };
     
     await saveDataToGitHub();
@@ -1556,10 +1413,7 @@ app.get('/api/content', (req, res) => {
   });
 });
 
-// ============================================
-// XTREAM API - CORREGIDO PARA TIVIMATE
-// ============================================
-
+// Xtream API - CORREGIDO PARA TIVIMATE
 function authenticate(req, res, next) {
   const { username, password } = req.query;
   if (username === USERNAME && password === PASSWORD) {
@@ -1569,7 +1423,7 @@ function authenticate(req, res, next) {
   }
 }
 
-// CRITICAL FIX: get.php ahora NO incluye series, solo películas
+// ✅ CORRECCIÓN: M3U con tvg-type="series" para TiviMate
 app.get('/get.php', (req, res) => {
   const { username, password } = req.query;
   
@@ -1580,7 +1434,22 @@ app.get('/get.php', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   let m3uContent = '#EXTM3U x-tvg-url=""\n\n';
   
-  // SOLO PELÍCULAS - Las series se obtienen por player_api.php
+  // Series
+  contentData.series.forEach(serie => {
+    if (serie.episodes) {
+      Object.keys(serie.episodes).forEach(seasonNum => {
+        const episodes = serie.episodes[seasonNum];
+        episodes.forEach(episode => {
+          const episodeName = `${serie.name} S${String(seasonNum).padStart(2, '0')}E${String(episode.episode_num).padStart(2, '0')} ${episode.title}`;
+          // ✅ CRÍTICO: tvg-type="series" para que TiviMate lo reconozca como serie
+          m3uContent += `#EXTINF:-1 tvg-id="serie_${serie.series_id}_${seasonNum}_${episode.episode_num}" tvg-name="${episodeName}" tvg-logo="${serie.cover}" tvg-type="series" group-title="📺 ${serie.name}",${episodeName}\n`;
+          m3uContent += `${baseUrl}/series/${username}/${password}/${episode.id}.${episode.container_extension}\n\n`;
+        });
+      });
+    }
+  });
+  
+  // Películas
   contentData.movies.forEach(movie => {
     m3uContent += `#EXTINF:-1 tvg-id="${movie.stream_id}" tvg-name="${movie.name}" tvg-logo="${movie.stream_icon}" group-title="🎬 Películas",${movie.name}\n`;
     m3uContent += `${baseUrl}/movie/${username}/${password}/${movie.stream_id}.${movie.container_extension}\n\n`;
@@ -1591,10 +1460,9 @@ app.get('/get.php', (req, res) => {
   res.send(m3uContent);
 });
 
-// CRITICAL FIX: player_api.php con formato correcto
+// ✅ ENDPOINT PRINCIPAL CORREGIDO - CRÍTICO PARA TIVIMATE
 app.get('/player_api.php', authenticate, (req, res) => {
   const action = req.query.action;
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
 
   switch (action) {
     case 'get_vod_streams':
@@ -1650,8 +1518,9 @@ app.get('/player_api.php', authenticate, (req, res) => {
       }
       break;
     
+    // ✅ CORRECCIÓN CRÍTICA: Este es el cambio más importante
     case 'get_series':
-      // CRITICAL: Formato exacto que TiviMate espera
+      // FORMATO CORRECTO: Cada serie DEBE tener stream_type: "series"
       const seriesFormatted = contentData.series.map(s => ({
         series_id: s.series_id,
         name: s.name,
@@ -1669,9 +1538,9 @@ app.get('/player_api.php', authenticate, (req, res) => {
         youtube_trailer: s.youtube_trailer || '',
         episode_run_time: s.episode_run_time || '45',
         category_id: s.category_id || '1',
-        category_ids: s.category_ids || [1],
+        category_ids: [parseInt(s.category_id || '1')], // ✅ Array de números
         num: s.series_id,
-        stream_type: "series" // CRITICAL: Esto diferencia de películas
+        stream_type: "series" // ✅ CRÍTICO: Sin esto TiviMate las trata como películas
       }));
       res.json(seriesFormatted);
       break;
@@ -1689,7 +1558,7 @@ app.get('/player_api.php', authenticate, (req, res) => {
           seasons: serie.seasons || [],
           info: {
             ...serie,
-            stream_type: "series",
+            stream_type: "series", // ✅ También aquí
             tmdb_id: serie.tmdb_id || '',
             backdrop_path: serie.backdrop_path || [serie.cover]
           },
@@ -1709,15 +1578,15 @@ app.get('/player_api.php', authenticate, (req, res) => {
       break;
     
     default:
-      // INFO DE USUARIO
+      // INFO DE USUARIO CORREGIDA CON FECHA DE EXPIRACIÓN
       res.json({
         user_info: {
           username: USERNAME,
           password: PASSWORD,
-          message: "API activa - Compatible con TiviMate",
+          message: "API activa",
           auth: 1,
           status: "Active",
-          exp_date: EXPIRATION_TIMESTAMP.toString(),
+          exp_date: EXPIRATION_TIMESTAMP.toString(), // ✅ TiviMate necesita esto
           is_trial: "0",
           active_cons: "0",
           created_at: Math.floor(Date.now() / 1000).toString(),
@@ -1725,7 +1594,7 @@ app.get('/player_api.php', authenticate, (req, res) => {
           allowed_output_formats: ["m3u8", "ts", "rtmp"]
         },
         server_info: {
-          url: baseUrl,
+          url: req.protocol + '://' + req.get('host'),
           port: port.toString(),
           https_port: "",
           server_protocol: req.protocol,
@@ -1738,7 +1607,6 @@ app.get('/player_api.php', authenticate, (req, res) => {
   }
 });
 
-// Endpoints de streaming
 app.get('/movie/:username/:password/:streamId.:ext', (req, res) => {
   const { username, password, streamId } = req.params;
   
@@ -1783,7 +1651,6 @@ app.get('/series/:username/:password/:episodeId.:ext', (req, res) => {
   }
 });
 
-// Página principal
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="es">
@@ -1906,7 +1773,7 @@ app.get('/', (req, res) => {
     <div class="info" style="margin-top: 15px;">
       <h3>🔗 Enlaces Directos</h3>
       <div class="info-item">
-        <strong>M3U Playlist (Solo Películas):</strong><br>
+        <strong>M3U Playlist:</strong><br>
         <a href="/get.php?username=${USERNAME}&password=${PASSWORD}" style="font-size: 12px; word-break: break-all;">
           ${req.protocol}://${req.get('host')}/get.php?username=${USERNAME}&password=${PASSWORD}
         </a>
@@ -1944,7 +1811,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Inicialización
+// Función de inicialización
 async function initServer() {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════╗');
@@ -1978,4 +1845,153 @@ app.listen(port, () => {
   initServer().catch(err => {
     console.error('Error al inicializar servidor:', err);
   });
-});
+});showAlert('Error al buscar. Verifica tu conexión.', 'error');
+      }
+    }
+    
+    function fillMovieForm(data) {
+      document.getElementById('movie-title').value = data.Title || '';
+      document.getElementById('movie-year').value = data.Year || '';
+      document.getElementById('movie-plot').value = data.Plot || '';
+      document.getElementById('movie-director').value = data.Director || '';
+      document.getElementById('movie-cast').value = data.Actors || '';
+      document.getElementById('movie-genre').value = data.Genre || '';
+      document.getElementById('movie-rating').value = data.imdbRating || '7.0';
+      document.getElementById('movie-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
+      document.getElementById('movie-imdb').value = data.imdbID || '';
+      
+      showAlert('Formulario rellenado. Añade la URL del video y guarda.', 'success');
+      document.getElementById('movie-url').focus();
+    }
+    
+    async function searchSeries() {
+      const query = document.getElementById('series-search').value.trim();
+      if (!query) {
+        showAlert('Escribe un título o ID de IMDb', 'error');
+        return;
+      }
+      
+      showAlert('Buscando...', 'success');
+      
+      try {
+        const res = await fetch(\`/api/search?query=\${encodeURIComponent(query)}&type=series\`);
+        const data = await res.json();
+        
+        const resultsDiv = document.getElementById('series-search-results');
+        resultsDiv.innerHTML = '';
+        
+        if (data.length === 0) {
+          resultsDiv.innerHTML = '<p style="padding: 20px; text-align: center; color: #666;">No se encontraron resultados. Verifica la API Key de OMDb.</p>';
+          return;
+        }
+        
+        data.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'search-result';
+          div.innerHTML = \`
+            <img src="\${item.Poster !== 'N/A' ? item.Poster : 'https://via.placeholder.com/200x300?text=Sin+Poster'}" alt="\${item.Title}">
+            <h4>\${item.Title}</h4>
+            <p>📅 \${item.Year}</p>
+            <p>🎭 \${item.Genre || 'N/A'}</p>
+            <p>⭐ \${item.imdbRating || 'N/A'}</p>
+          \`;
+          div.onclick = () => fillSeriesForm(item);
+          resultsDiv.appendChild(div);
+        });
+        
+        showAlert(\`\${data.length} resultados encontrados\`, 'success');
+      } catch (error) {
+        showAlert('Error al buscar. Verifica tu conexión.', 'error');
+      }
+    }
+    
+    function fillSeriesForm(data) {
+      document.getElementById('series-title').value = data.Title || '';
+      document.getElementById('series-year').value = data.Year?.split('–')[0] || '';
+      document.getElementById('series-plot').value = data.Plot || '';
+      document.getElementById('series-director').value = data.Director || '';
+      document.getElementById('series-cast').value = data.Actors || '';
+      document.getElementById('series-genre').value = data.Genre || '';
+      document.getElementById('series-rating').value = data.imdbRating || '8.0';
+      document.getElementById('series-poster').value = data.Poster !== 'N/A' ? data.Poster : '';
+      
+      showAlert('Formulario rellenado. Guarda la serie.', 'success');
+    }
+    
+    async function saveMovie(e) {
+      e.preventDefault();
+      
+      const editId = document.getElementById('movie-edit-id').value;
+      const movieData = {
+        name: document.getElementById('movie-title').value,
+        year: document.getElementById('movie-year').value,
+        plot: document.getElementById('movie-plot').value,
+        director: document.getElementById('movie-director').value,
+        cast: document.getElementById('movie-cast').value,
+        genre: document.getElementById('movie-genre').value,
+        rating: document.getElementById('movie-rating').value,
+        poster: document.getElementById('movie-poster').value,
+        url: document.getElementById('movie-url').value,
+        imdb: document.getElementById('movie-imdb').value
+      };
+      
+      if (editId) {
+        movieData.id = editId;
+      }
+      
+      try {
+        const res = await fetch('/api/movie', {
+          method: editId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(movieData)
+        });
+        
+        if (res.ok) {
+          showAlert(editId ? '✅ Película actualizada y guardada en GitHub' : '✅ Película agregada y guardada en GitHub', 'success');
+          resetMovieForm();
+          document.getElementById('movie-search-results').innerHTML = '';
+        } else {
+          const error = await res.json();
+          showAlert('❌ Error: ' + (error.error || 'Error desconocido'), 'error');
+        }
+      } catch (error) {
+        showAlert('❌ Error de conexión', 'error');
+      }
+    }
+    
+    async function saveSeries(e) {
+      e.preventDefault();
+      
+      const editId = document.getElementById('series-edit-id').value;
+      const seriesData = {
+        name: document.getElementById('series-title').value,
+        year: document.getElementById('series-year').value,
+        plot: document.getElementById('series-plot').value,
+        director: document.getElementById('series-director').value,
+        cast: document.getElementById('series-cast').value,
+        genre: document.getElementById('series-genre').value,
+        rating: document.getElementById('series-rating').value,
+        poster: document.getElementById('series-poster').value
+      };
+      
+      if (editId) {
+        seriesData.id = editId;
+      }
+      
+      try {
+        const res = await fetch('/api/series', {
+          method: editId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(seriesData)
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          showAlert(editId ? '✅ Serie actualizada' : '✅ Serie creada. Ahora añade temporadas y episodios.', 'success');
+          currentSeriesId = data.series_id || editId;
+          document.getElementById('season-manager').style.display = 'block';
+          loadSeasons(currentSeriesId);
+        } else {
+          showAlert('❌ Error: ' + (data.error || 'Error desconocido'), 'error');
+        }
+      } catch (error) {
